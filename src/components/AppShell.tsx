@@ -9,7 +9,7 @@ import { fmt } from '@/lib/format';
 import { resumenMateriales } from '@/lib/inv';
 
 const TABS: [string, string][] = [['/', 'Hoy'], ['/turno', 'Turno'], ['/operadores', 'Operadores'], ['/departamentos', 'Departamentos'], ['/paros', 'Paros'], ['/mantenimiento', 'Mantenimiento'], ['/inventario', 'Inventario'], ['/analisis', 'Análisis'], ['/ordenes', 'Órdenes'], ['/maquinas', 'Máquinas']];
-const TAB_DUENO: [string, string] = ['/bitacora', 'Bitácora'];
+const TAB_DUENO: [string, string][] = [['/bitacora', 'Bitácora'], ['/usuarios', 'Usuarios']];
 const ROL: Record<string, string> = { dueno: 'Dueño', encargado: 'Encargado', mecanico: 'Mecánico', lectura: 'Solo lectura' };
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -33,7 +33,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <nav className="tabs" role="tablist">
-          {(isDueno ? [...TABS, TAB_DUENO] : TABS).map(([h, t]) => (
+          {(isDueno ? [...TABS, ...TAB_DUENO] : TABS).map(([h, t]) => (
             <Link key={h} href={h} role="tab" aria-selected={h === '/' ? path === '/' : path.startsWith(h)} style={{ textDecoration: 'none' }}>
               <button tabIndex={-1}>{t}{h === '/inventario' && bajos > 0 ? ` · ${fmt(bajos)}` : ''}</button>
             </Link>
