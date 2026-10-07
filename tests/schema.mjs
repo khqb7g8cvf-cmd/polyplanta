@@ -1,0 +1,35 @@
+import { PGlite } from '@electric-sql/pglite';
+import fs from 'node:fs';
+const db = new PGlite();
+await db.exec(`
+create schema auth;
+create table auth.users (id uuid primary key, email text, raw_user_meta_data jsonb default '{}');
+create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+create role authenticated; create role anon;
+grant usage on schema public, auth to authenticated;
+create publication supabase_realtime;
+`);
+await db.exec(fs.readFileSync('supabase/migrations/20261007000000_init.sql','utf8'));
+await db.exec(fs.readFileSync('supabase/seed.sql','utf8'));
+await db.exec('grant select,insert,update,delete on all tables in schema public to authenticated; grant execute on all functions in schema public to authenticated;');
+const q = async (s,p)=> (await db.query(s,p)).rows;
+console.log('maquinas', (await q('select count(*)::int n from maquinas'))[0].n, 'materiales', (await q('select count(*)::int n from materiales'))[0].n);
+// usuarios: el primero es dueño, el segundo lectura
+const A='00000000-0000-0000-0000-00000000000a', B='00000000-0000-0000-0000-00000000000b';
+await db.exec(`insert into auth.users(id,email) values ('${A}','corcho@x.com'),('${B}','roberto@x.com')`);
+console.log('roles', await q('select nombre,rol from profiles order by nombre'));
+await db.exec(`update profiles set rol='encargado' where id='${B}'`);
+const as = async (id, fn)=>{ await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub','${id}',false)`); try{ return await fn() } finally { await db.exec('reset role') } };
+const tryq = async (id,sql)=> as(id, async()=>{ try{ const r=await db.query(sql); return 'ok '+(r.affectedRows??r.rows.length)}catch(e){ return 'ERR '+e.message.slice(0,60)} });
+console.log('encargado inserta reporte:', await tryq(B,"insert into reportes(fecha,turno) values ('2026-10-06',1)"));
+console.log('encargado edita maquina:', await tryq(B,"update maquinas set kgh=10 where id='ext1'"));
+console.log('dueño edita maquina:', await tryq(A,"update maquinas set kgh=120 where id='ext1'"));
+console.log('encargado lee amonestaciones:', await tryq(B,"select * from amonestaciones"));
+console.log('dueno crea amonestacion:', await tryq(A,"insert into amonestaciones(operario,tipo) values ('Marco','Verbal')"));
+const mat = (await q("select id from materiales where nombre='PEBD virgen'"))[0].id;
+console.log('entrada:', await tryq(B,`insert into inv_movimientos(material_id,tipo,delta_kg,sacos) values ('${mat}','entrada',2500,100)`));
+console.log('salida:', await tryq(B,`insert into inv_movimientos(material_id,tipo,delta_kg,maquina_id) values ('${mat}','salida',-300,'ext1')`));
+console.log('salida positiva rechazada:', await tryq(B,`insert into inv_movimientos(material_id,tipo,delta_kg) values ('${mat}','salida',50)`));
+console.log('conteo (cuenta 2150 vs 2200):', await as(B, async()=> (await db.query(`select registrar_conteo('${mat}',2150,'prueba') d`)).rows[0].d));
+console.log('existencia:', await q(`select kg from inv_existencias where material_id='${mat}'`));
+console.log('lectura intenta insertar:', await (async()=>{ await db.exec(`insert into auth.users(id,email) values ('00000000-0000-0000-0000-00000000000c','x@x.com')`); return tryq('00000000-0000-0000-0000-00000000000c',"insert into paros(maquina_id,causa,inicio) values ('ext1','Mecánico',now())") })());
