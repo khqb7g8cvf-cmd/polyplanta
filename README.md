@@ -11,8 +11,8 @@ Next.js 15 (App Router) + Supabase (Postgres, Auth, RLS, Realtime) + Vercel.
    1. `supabase/migrations/20261007000000_init.sql` (tablas, permisos por rol, inventario)
    2. `supabase/seed.sql` (23 máquinas, parámetros por defecto, materiales iniciales)
 3. **Project Settings → API**: copia `Project URL` y `anon public key`.
-4. **Authentication → Providers → Email**: déjalo activo. Para que el equipo entre sin confirmar correo, desactiva *Confirm email*.
-5. Crea tu cuenta desde la pantalla de login de la app. **La primera cuenta que se crea es el dueño.** Las demás entran en solo lectura hasta que el dueño les asigne rol en *Máquinas ▸ Usuarios y roles*.
+4. Aplica también `supabase/migrations/20261007120000_usuarios_bitacora_kardex.sql` (usuarios, bitácora, kardex).
+5. Abre la app: la primera vez pide crear el **dueño** (usuario + contraseña, sin correo). Después, en *Máquinas ▸ Usuarios y roles* creas las cuentas del equipo, les cambias la contraseña o las desactivas.
 
 ### 2. Vercel
 1. *Add New → Project* → importa este repo de GitHub.
@@ -50,3 +50,10 @@ Los permisos se aplican en la base de datos (RLS), no solo en la interfaz.
 - kg/millar = ancho(m) × largo(m) × (calibre / 2) × densidad (0.92 baja, 0.95 alta)
 - Bolseo kg/h = golpes × 60 × carriles / 1000 × kg/millar
 - Esperado por turno = kg/h × (horas productivas − paros justificados). Cumplimiento = reportado / esperado.
+
+
+## Novedades
+- **Login por usuario y contraseña** (internamente `usuario@usuarios.polyamsa.mx`; no se manda ningún correo).
+- **Bitácora** (solo dueño): cada alta, cambio y borrado queda firmado con usuario y hora del servidor, es inmutable y marca alertas (kilos editados, borrados, ajustes de inventario, fechas atrasadas, cambios de meta).
+- **Departamentos**: cumplimiento, disponibilidad, rendimiento, mapa de calor, ranking, turnos, pareto de paros, CSV.
+- **Inventario**: kardex con saldo corrido, motivo/destino de cada salida, consumo, proveedores y precios.

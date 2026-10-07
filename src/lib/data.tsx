@@ -16,7 +16,7 @@ interface Ctx {
   db: SupabaseClient; S: Store; cfg: Cfg; me: Profile | null; loaded: boolean; live: boolean;
   L: LineaCalc[]; OT: OpTurno[];
   canProd: boolean; canMtto: boolean; isDueno: boolean;
-  maqById: (id?: string | null) => Maquina | undefined; maqs: (tipo?: string) => Maquina[]; ordById: (id?: string | null) => Orden | undefined;
+  quien: (id?: string | null) => string; maqById: (id?: string | null) => Maquina | undefined; maqs: (tipo?: string) => Maquina[]; ordById: (id?: string | null) => Orden | undefined;
   refresh: () => void;
   /** Ejecuta una operación de Supabase; muestra el error si falla. */
   run: (p: PromiseLike<{ error: { message: string } | null }>, okMsg?: string) => Promise<boolean>;
@@ -50,7 +50,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const load = useCallback(async () => {
-    const cut = daysAgo(92), cutTs = new Date(Date.now() - 92 * 864e5).toISOString(), cutMov = new Date(Date.now() - 150 * 864e5).toISOString();
+    const cut = daysAgo(92), cutTs = new Date(Date.now() - 92 * 864e5).toISOString();
     const { data: u } = await db.auth.getUser();
     const uid = u.user?.id;
     const q = await Promise.all([
@@ -63,7 +63,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       db.from('mtto').select('*'),
       db.from('amonestaciones').select('*').order('fecha', { ascending: false }),
       db.from('materiales').select('*').order('nombre'),
-      db.from('inv_movimientos').select('*').gte('fecha', cutMov).order('fecha', { ascending: false }),
+      db.from('inv_movimientos').select('*').order('fecha', { ascending: false }).order('created_at', { ascending: false }).limit(5000),
       db.from('inv_existencias').select('*'),
       uid ? db.from('profiles').select('*').eq('id', uid).maybeSingle() : Promise.resolve({ data: null, error: null }),
       db.from('profiles').select('*').order('created_at'),
@@ -116,6 +116,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const value: Ctx = {
     db, S, cfg, me, loaded, live, L, OT, now, turno, setTurno, run, toast, toastMsg, refresh,
     canProd: rol === 'dueno' || rol === 'encargado', canMtto: rol === 'dueno' || rol === 'encargado' || rol === 'mecanico', isDueno: rol === 'dueno',
+    quien: (id) => { if (!id) return '—'; const u = S.usuarios.find((x) => x.id === id); return u ? (u.usuario || u.nombre) : 'desconocido'; },
     maqById: (id) => S.maquinas.find((m) => m.id === id), maqs: (t) => S.maquinas.filter((m) => !t || m.tipo === t),
     ordById: (id) => S.ordenes.find((o) => o.id === id),
   };

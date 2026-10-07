@@ -41,7 +41,7 @@ test('ya sancionado no repite', () => {
 });
 
 const mat: Material = { id: 'x', nombre: 'PEBD', categoria: 'resina', kg_por_saco: 25, minimo_kg: 1000, activo: true };
-const mv = (o: Partial<Movimiento>): Movimiento => ({ id: Math.random() + '', material_id: 'x', tipo: 'salida', fecha: '2026-10-05T10:00:00', delta_kg: -300, sacos: null, lote: null, proveedor: null, factura: null, costo_kg: null, maquina_id: null, orden_id: null, nota: null, ...o });
+const mv = (o: Partial<Movimiento>): Movimiento => ({ id: Math.random() + '', material_id: 'x', tipo: 'salida', fecha: '2026-10-05T10:00:00', delta_kg: -300, sacos: null, lote: null, proveedor: null, factura: null, costo_kg: null, maquina_id: null, orden_id: null, nota: null, motivo: null, referencia: null, created_by: null, created_at: '2026-10-05T10:00:00', ...o });
 
 test('inventario: cobertura, mínimo, costo', () => {
   const movs = [mv({}), mv({ delta_kg: -300, fecha: '2026-10-06T10:00:00' }), mv({ tipo: 'entrada', delta_kg: 5000, costo_kg: 32, fecha: '2026-10-01T10:00:00' })];
@@ -57,4 +57,34 @@ test('conciliación salidas vs extruidos', () => {
   const l = buildLineas([rep('r1', '2026-10-05', 1, [linea({ maquina_id: 'e1', kilos: 250 })])], [maq({ id: 'e1', tipo: 'extrusion', kgh: 40 })], [], DEF_CFG, now);
   const c = conciliacion([mv({}), mv({ delta_kg: -100 })], l, '2026-10-01', '2026-10-07');
   assert.equal(c.salidas, 400); assert.equal(c.extruidos, 250); assert.equal(c.dif, 150);
+});
+
+import { agg, diasEntre, porOperador, paretoParos, porDiaSemana } from '../src/lib/analytics.ts';
+const lc = (o: Partial<import('../src/lib/types.ts').LineaCalc>) => ({ id: Math.random() + '', reporte_id: 'r1', maquina_id: 'm1', orden_id: null, cliente: null, ancho: null, largo: null, calibre: null, densidad: null, golpes: null, kgh: 100, carriles: null, horas: null, operario: 'Ana', kilos: 800, nota: null, justificada: false, fecha: '2026-10-05', turno: 1 as const, tipo: 'extrusion' as const, exp: 1000, expRaw: 1000, excH: 0, pct: 0.8, pctRaw: 0.8, ...o });
+test('analytics: agg y rangos', () => {
+  const a = agg([lc({}), lc({ kilos: 1200, exp: 1000, pct: 1.2 })]);
+  assert.equal(a.kg, 2000); assert.equal(a.pct, 1);
+  assert.deepEqual(diasEntre('2026-10-30', '2026-11-02'), ['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02']);
+});
+test('analytics: operadores y turnos bajos', () => {
+  const r = porOperador([lc({}), lc({ reporte_id: 'r2', kilos: 1000, pct: 1 }), lc({ operario: 'Beto', reporte_id: 'r3', kilos: 500, pct: 0.5 })], DEF_CFG, ['2026-10-05']);
+  assert.equal(r[0].operario, 'Ana'); assert.equal(r.find((x) => x.operario === 'Ana')!.bajos, 1); assert.equal(r.find((x) => x.operario === 'Beto')!.bajos, 1);
+});
+test('analytics: pareto y día de semana', () => {
+  const p = paretoParos([{ id: '1', maquina_id: 'm1', causa: 'Mecánico', inicio: '2026-10-05T08:00:00', fin: '2026-10-05T10:00:00', orden_id: null, nota: null }, { id: '2', maquina_id: 'm1', causa: 'Comida', inicio: '2026-10-05T12:00:00', fin: '2026-10-05T12:30:00', orden_id: null, nota: null }], new Set(['m1']), '2026-10-01', '2026-10-07');
+  assert.equal(p[0].causa, 'Mecánico'); assert.ok(Math.abs(p[0].h - 2) < 1e-6);
+  assert.equal(porDiaSemana([lc({})])[0].kg, 800); // 2026-10-05 es lunes
+});
+
+import { kardex, existenciaDiaria, proveedores, salidasPor } from '../src/lib/inv.ts';
+test('kardex: saldo corrido y existencia diaria', () => {
+  const movs = [mv({ id: 'c', delta_kg: -200, fecha: '2026-10-05T10:00:00' }), mv({ id: 'b', delta_kg: -300, fecha: '2026-10-04T10:00:00' }), mv({ id: 'a', tipo: 'entrada', delta_kg: 1000, fecha: '2026-10-03T10:00:00' })];
+  const k = kardex(movs, { x: 500 });
+  assert.deepEqual(k.map((r) => r.saldo), [500, 700, 1000]);
+  assert.deepEqual(existenciaDiaria(movs, 500, ['2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05']), [0, 1000, 700, 500]);
+});
+test('proveedores: precio ponderado y salidas por motivo', () => {
+  const p = proveedores([mv({ tipo: 'entrada', delta_kg: 1000, costo_kg: 30, proveedor: 'A' }), mv({ tipo: 'entrada', delta_kg: 3000, costo_kg: 34, proveedor: 'A' })]);
+  assert.equal(p[0].promedio, 33); assert.equal(p[0].ultimo, 34);
+  assert.equal(salidasPor([mv({ motivo: 'merma' }), mv({ motivo: 'merma', delta_kg: -100 })], (m) => m.motivo || 'sin')[0].kg, 400);
 });

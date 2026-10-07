@@ -7,15 +7,15 @@ import { AreaF, Empty, Fld, Modal, Pill, Scroll, SelF } from '@/components/ui';
 import type { Paro } from '@/lib/types';
 
 export default function Paros() {
-  const { S, now, maqById, canProd, run, db } = useData();
+  const { S, now, maqById, canProd, run, db, quien } = useData();
   const [open, setOpen] = useState(false);
   const abiertos = S.paros.filter((p) => !p.fin).sort((a, b) => a.inicio.localeCompare(b.inicio));
   const cut = new Date(now - 7 * 864e5).toISOString(), rec = S.paros.filter((p) => p.fin && p.inicio >= cut).sort((a, b) => b.inicio.localeCompare(a.inicio));
   const tbl = (L: Paro[]) => (
-    <Scroll><table className="t"><thead><tr><th>Máquina</th><th>Causa</th><th>Inicio</th><th className="num">Duración</th><th>Nota</th><th></th></tr></thead><tbody>
+    <Scroll><table className="t"><thead><tr><th>Máquina</th><th>Causa</th><th>Inicio</th><th className="num">Duración</th><th>Nota</th><th>Registró</th><th></th></tr></thead><tbody>
       {L.map((p) => (
         <tr key={p.id}><td>{maqById(p.maquina_id)?.nombre || '?'}</td><td><Pill c={p.causa === 'Mecánico' ? 'bad' : ''}>{p.causa}</Pill></td><td className="mono">{dmy(p.inicio)} {hhmm(p.inicio)}</td>
-          <td className="num">{fmtDur((p.fin ? Date.parse(p.fin) : now) - Date.parse(p.inicio))}</td><td>{p.nota || ''}</td>
+          <td className="num">{fmtDur((p.fin ? Date.parse(p.fin) : now) - Date.parse(p.inicio))}</td><td>{p.nota || ''}</td><td>{quien(p.created_by)}</td>
           <td>{!p.fin && canProd && <button className="btn sm" onClick={() => run(db.from('paros').update({ fin: new Date().toISOString() }).eq('id', p.id), 'Máquina reanudada')}>Reanudar</button>}</td></tr>))}
     </tbody></table></Scroll>
   );

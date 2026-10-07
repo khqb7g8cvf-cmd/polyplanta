@@ -18,11 +18,11 @@ export function useMoney() {
 }
 
 export function LinesTable({ arr }: { arr: LineaCalc[] }) {
-  const { maqById, cfg } = useData();
+  const { maqById, cfg, quien } = useData();
   return (
     <Scroll>
       <table className="t">
-        <thead><tr><th>Máquina</th><th>Operador</th><th>Orden</th><th className="num">Debía</th><th className="num">Reportó</th><th className="num">Dif.</th><th>Cumplimiento</th></tr></thead>
+        <thead><tr><th>Máquina</th><th>Operador</th><th>Orden</th><th className="num">Debía</th><th className="num">Reportó</th><th className="num">Dif.</th><th>Cumplimiento</th><th>Capturó</th></tr></thead>
         <tbody>
           {arr.map((x) => (
             <tr key={x.id}>
@@ -33,6 +33,7 @@ export function LinesTable({ arr }: { arr: LineaCalc[] }) {
               <td className="num">{fmt(x.kilos)}</td>
               <td className="num" style={x.exp && x.kilos < x.exp ? { color: 'var(--bad)' } : undefined}>{x.exp ? fmt(x.kilos - x.exp) : '—'}</td>
               <td><PctCell p={x.pct} c={cls(x.pct, cfg)} txt={pctTxt(x.pct)} /></td>
+              <td className="mut">{quien(x.created_by)}</td>
             </tr>
           ))}
         </tbody>

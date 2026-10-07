@@ -26,3 +26,48 @@ export function conciliacion(movs: Movimiento[], lineas: LineaCalc[], desde: str
   const dif = salidas - extruidos;
   return { salidas, extruidos, dif, pct: salidas ? dif / salidas : null };
 }
+
+export const MOTIVOS: [string, string][] = [['produccion', 'Producción'], ['merma', 'Merma / desperdicio'], ['muestra', 'Muestra / prueba'], ['devolucion', 'Devolución'], ['traspaso', 'Traspaso'], ['venta', 'Venta de material'], ['otro', 'Otro']];
+export const motivoTxt = (m: string | null | undefined, tipo?: string) => (m ? MOTIVOS.find((x) => x[0] === m)?.[1] ?? m : tipo === 'entrada' ? 'Compra' : tipo === 'ajuste' ? 'Ajuste de conteo' : '—');
+
+export interface KRow extends Movimiento { saldo: number }
+/** Kardex: cada movimiento con el saldo del material justo después de aplicarlo. `movs` debe venir del más nuevo al más viejo. */
+export function kardex(movs: Movimiento[], existencias: Record<string, number>): KRow[] {
+  const run = new Map<string, number>();
+  return movs.map((m) => {
+    const cur = run.get(m.material_id) ?? existencias[m.material_id] ?? 0;
+    run.set(m.material_id, cur - m.delta_kg);
+    return { ...m, saldo: cur };
+  });
+}
+
+/** Existencia al cierre de cada día (dias ascendente, formato YYYY-MM-DD). */
+export function existenciaDiaria(movs: Movimiento[], existenciaActual: number, dias: string[]): number[] {
+  const out: number[] = [];
+  const sorted = [...movs].sort((a, b) => b.fecha.localeCompare(a.fecha));
+  for (let i = dias.length - 1; i >= 0; i--) {
+    const after = sorted.filter((m) => m.fecha.slice(0, 10) > dias[i]).reduce((s, m) => s + m.delta_kg, 0);
+    out[i] = existenciaActual - after;
+  }
+  return out;
+}
+
+export function salidasPor<K extends string>(movs: Movimiento[], key: (m: Movimiento) => K) {
+  const g = new Map<K, number>();
+  for (const m of movs) if (m.tipo === 'salida') g.set(key(m), (g.get(key(m)) || 0) - m.delta_kg);
+  return [...g].map(([k, kg]) => ({ k, kg })).sort((a, b) => b.kg - a.kg);
+}
+
+export interface Prov { proveedor: string; n: number; kg: number; monto: number; kgConPrecio: number; promedio: number | null; ultimo: number | null; ultimaFecha: string }
+export function proveedores(movs: Movimiento[]): Prov[] {
+  const g = new Map<string, Prov>();
+  for (const m of [...movs].sort((a, b) => a.fecha.localeCompare(b.fecha))) {
+    if (m.tipo !== 'entrada') continue;
+    const k = (m.proveedor || '').trim() || 'Sin proveedor';
+    const p = g.get(k) || { proveedor: k, n: 0, kg: 0, monto: 0, kgConPrecio: 0, promedio: null, ultimo: null, ultimaFecha: m.fecha };
+    p.n++; p.kg += m.delta_kg; p.ultimaFecha = m.fecha;
+    if (m.costo_kg) { p.monto += m.costo_kg * m.delta_kg; p.kgConPrecio += m.delta_kg; p.ultimo = m.costo_kg; }
+    g.set(k, p);
+  }
+  return [...g.values()].map((p) => ({ ...p, promedio: p.kgConPrecio ? p.monto / p.kgConPrecio : null })).sort((a, b) => b.kg - a.kg);
+}
