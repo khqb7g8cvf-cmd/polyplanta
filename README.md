@@ -12,7 +12,7 @@ Next.js 15 (App Router) + Supabase (Postgres, Auth, RLS, Realtime) + Vercel.
    2. `supabase/seed.sql` (23 máquinas, parámetros por defecto, materiales iniciales)
 3. **Project Settings → API**: copia `Project URL` y `anon public key`.
 4. Aplica también `supabase/migrations/20261007120000_usuarios_bitacora_kardex.sql` (usuarios, bitácora, kardex).
-5. Abre la app: la primera vez pide crear el **dueño** (usuario + contraseña, sin correo). Después, en *Máquinas ▸ Usuarios y roles* creas las cuentas del equipo, les cambias la contraseña o las desactivas.
+5. Abre la app: la primera vez pide crear el **dueño** (usuario + contraseña, sin correo). Después, en la pestaña *Usuarios* creas las cuentas del equipo, les cambias la contraseña o las desactivas.
 
 ### 2. Vercel
 1. *Add New → Project* → importa este repo de GitHub.

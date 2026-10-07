@@ -39,7 +39,7 @@ export default function Login() {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo-white.png" alt="Polyamsa" />
         <h1>{setup ? 'Configurar la planta' : 'Control de planta'}</h1>
-        {setup && <p className="mut" style={{ margin: 0 }}>Crea la cuenta del dueño. Después podrás dar de alta a los demás desde Máquinas ▸ Usuarios.</p>}
+        {setup && <p className="mut" style={{ margin: 0 }}>Crea la cuenta del dueño. Después podrás dar de alta a los demás desde la pestaña Usuarios.</p>}
         {setup && <label className="f"><span>Tu nombre</span><input value={nombre} onChange={(e) => setNombre(e.target.value)} required /></label>}
         <label className="f"><span>Usuario</span><input autoCapitalize="none" autoCorrect="off" autoComplete="username" value={usuario} onChange={(e) => setUsuario(e.target.value)} required /></label>
         <label className="f"><span>Contraseña</span><input type="password" autoComplete={setup ? 'new-password' : 'current-password'} minLength={6} value={pass} onChange={(e) => setPass(e.target.value)} required /></label>
