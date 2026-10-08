@@ -78,6 +78,7 @@ const tipoPill = (t: string) => <Pill c={t === 'entrada' ? 'good' : t === 'salid
 
 function Kardex() {
   const { S, isDueno, maqById, ordById, quien, run, db, now } = useData();
+  const [ce, setCe] = useState<{ id: string; costo: number | null; nombre: string } | null>(null);
   const [f, setF] = useState({ mat: '', lugar: '', tipo: '', motivo: '', user: '', desde: daysAgo(29), hasta: ymd(new Date(now)), q: '' });
   const p = (k: Partial<typeof f>) => setF((s) => ({ ...s, ...k }));
   const matBy = (id: string) => S.materiales.find((m) => m.id === id)?.nombre || '?';
@@ -124,14 +125,31 @@ function Kardex() {
               <td>{motivoTxt(x.motivo, x.tipo)}</td><td>{destino(x) || <span className="mut">—</span>}{x.nota && <div className="mut">{x.nota}</div>}</td>
               <td>{[x.proveedor, x.lote && `lote ${x.lote}`, x.factura && `fact. ${x.factura}`, x.costo_kg && `$${fmt(x.costo_kg, 2)}/kg`].filter(Boolean).join(' · ') || <span className="mut">—</span>}</td>
               <td><b>{quien(x.created_by)}</b><div className="mut">{x.created_at ? `${dmy(x.created_at)} ${hhmm(x.created_at)}` : ''}</div></td>
-              <td>{isDueno && <button className="btn sm danger" onClick={() => confirm('¿Anular este movimiento? Cambia la existencia y queda en la bitácora.') && run(db.from('inv_movimientos').delete().eq('id', x.id), 'Movimiento anulado')}>Anular</button>}</td>
+              <td style={{ whiteSpace: 'nowrap' }}>{isDueno && x.tipo === 'entrada' && <><button className="btn sm" onClick={() => setCe({ id: x.id, costo: x.costo_kg, nombre: matBy(x.material_id) })}>Costo</button>{' '}</>}{isDueno && <button className="btn sm danger" onClick={() => confirm('¿Anular este movimiento? Cambia la existencia y queda en la bitácora.') && run(db.from('inv_movimientos').delete().eq('id', x.id), 'Movimiento anulado')}>Anular</button>}</td>
             </tr>))}
         </tbody>
           <tfoot><tr><td colSpan={4}><b>Totales del filtro ({fmt(vis.length)})</b></td><td className="num" style={{ color: 'var(--good)' }}><b>{fmt(ent, 1)}</b></td><td className="num" style={{ color: 'var(--bad)' }}><b>{fmt(sal, 1)}</b></td><td className="num"><b>{ent - sal >= 0 ? '+' : ''}{fmt(ent - sal, 1)}</b></td><td colSpan={5} className="mut">neto del periodo (kg)</td></tr></tfoot>
         </table></Scroll>
       ) : <Empty>No hay movimientos con estos filtros.</Empty>}
+      {ce && <CostoModal c={ce} onClose={() => setCe(null)} />}
       {vis.length > 500 && <p className="mut">Mostrando 500 de {fmt(vis.length)}. Usa los filtros o el CSV.</p>}
     </section>
+  );
+}
+
+function CostoModal({ c, onClose }: { c: { id: string; costo: number | null; nombre: string }; onClose: () => void }) {
+  const { db, toast, refresh } = useData();
+  const [v, setV] = useState<number | null>(c.costo);
+  async function save() {
+    const { error } = v == null ? await db.from('inv_costos').delete().eq('id', c.id) : await db.from('inv_costos').upsert({ id: c.id, costo_kg: v });
+    if (error) return toast(error.message, true);
+    toast('Costo guardado'); refresh(); onClose();
+  }
+  return (
+    <Modal title={`Costo · ${c.nombre}`} onClose={onClose} foot={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn primary" onClick={save}>Guardar</button></>}>
+      <NumF l="Costo por kg (MXN)" v={v} on={setV} />
+      <p className="mut" style={{ marginTop: 8 }}>Déjalo vacío para quitar el costo. El cambio queda en la bitácora.</p>
+    </Modal>
   );
 }
 
