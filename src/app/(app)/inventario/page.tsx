@@ -25,7 +25,7 @@ export default function Inventario() {
       <section className="sec">
         <h2>Inventario
           <span className="row">
-            <button className="btn" disabled={!canProd} onClick={() => setModo({ k: 'conteo' })}>Conteo físico</button>
+            {isDueno && <button className="btn" onClick={() => setModo({ k: 'conteo' })}>Conteo físico</button>}
             <button className="btn" disabled={!canProd} onClick={() => setModo({ k: 'salida' })}>− Salida</button>
             <button className="btn primary" disabled={!canProd} onClick={() => setModo({ k: 'entrada' })}>+ Entrada</button>
           </span></h2>

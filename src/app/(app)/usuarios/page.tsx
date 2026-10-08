@@ -18,7 +18,7 @@ function Usuarios() {
   return (
     <section className="sec">
       <h2>Usuarios y roles <button className="btn primary" onClick={() => setNuevo(true)}>+ Nuevo usuario</button></h2>
-      <p className="mut" style={{ margin: '0 0 10px', maxWidth: '75ch' }}>Tú creas cada cuenta (usuario y contraseña) y se la das a la persona. Dueño: todo y es el único que ve la bitácora. Encargado: captura reportes, paros e inventario. Mecánico: solo mantenimiento. Solo lectura: ve todo, no captura. Todo lo que cada quien captura queda firmado con su usuario.</p>
+      <p className="mut" style={{ margin: '0 0 10px', maxWidth: '75ch' }}>Tú creas cada cuenta (usuario y contraseña) y se la das a la persona. Dueño: todo y es el único que ve la bitácora. Encargado: captura reportes y paros, y en inventario solo entradas y salidas (sin conteos, ajustes, anulaciones ni materiales). Mecánico: solo mantenimiento. Solo lectura: ve todo, no captura. Todo lo que cada quien captura queda firmado con su usuario.</p>
       <Scroll><table className="t" style={{ minWidth: 560 }}><thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Estado</th><th></th></tr></thead><tbody>
         {S.usuarios.map((u: Profile) => (
           <tr key={u.id}><td className="mono"><b>{u.usuario || '—'}</b>{u.id === me?.id && <> <Pill c="ink">tú</Pill></>}</td><td>{u.nombre || '(sin nombre)'}</td>
