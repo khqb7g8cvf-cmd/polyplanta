@@ -64,7 +64,7 @@ export function buildLineas(reportes: Reporte[], maquinas: Maquina[], paros: Par
   const mById = new Map(maquinas.map((m) => [m.id, m]));
   for (const rep of reportes) {
     const byM = new Map<string, LineaRow[]>();
-    for (const l of rep.reporte_lineas || []) byM.set(l.maquina_id, [...(byM.get(l.maquina_id) || []), l]);
+    for (const l of rep.reporte_lineas || []) if (!l.incidencia) byM.set(l.maquina_id, [...(byM.get(l.maquina_id) || []), l]);
     for (const [mid, ls] of byM) {
       const m = mById.get(mid), excH = paroH(paros, mid, rep.fecha, rep.turno, cfg, exc, now), heff = Math.max(0, H - excH);
       const hs = ls.map((x) => Number(x.horas) || 0), all = ls.length > 1 && hs.every((x) => x > 0), tot = hs.reduce((a, b) => a + b, 0);

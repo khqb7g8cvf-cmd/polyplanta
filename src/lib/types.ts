@@ -20,7 +20,7 @@ export interface LineaRow {
   id: string; reporte_id: string; maquina_id: string; orden_id: string | null; cliente: string | null;
   ancho: number | null; largo: number | null; calibre: number | null; densidad: string | null;
   golpes: number | null; kgh: number | null; carriles: number | null; horas: number | null;
-  operario: string; kilos: number; nota: string | null; justificada: boolean; created_by?: string | null; created_at?: string;
+  operario: string; kilos: number; nota: string | null; justificada: boolean; incidencia?: 'sin_operador' | 'sin_trabajo' | null; created_by?: string | null; created_at?: string;
 }
 export interface Reporte { id: string; fecha: string; turno: 1 | 2; created_by?: string | null; created_at?: string; reporte_lineas: LineaRow[] }
 export interface Paro { id: string; maquina_id: string; causa: string; inicio: string; fin: string | null; orden_id: string | null; nota: string | null; created_by?: string | null; created_at?: string }

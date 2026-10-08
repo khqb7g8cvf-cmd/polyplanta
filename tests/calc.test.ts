@@ -103,3 +103,9 @@ test('candado: 15 minutos o autorización vigente', () => {
   assert.ok(autorizacion([s], 'r1', 'b1', 'u2', now));
   assert.equal(autorizacion([s], 'r1', 'b1', 'u2', Date.parse('2026-10-08T19:00:00Z')), undefined);
 });
+
+test('incidencia (faltó operador / máquina no trabajó) no entra a la estadística', () => {
+  const l = buildLineas([rep('r1', '2026-10-06', 1, [linea({ incidencia: 'sin_operador', kilos: 0, operario: 'Sin operador' })]), rep('r2', '2026-10-06', 2, [linea({ incidencia: 'sin_trabajo', kilos: 0, operario: '—' })])], [maq({ id: 'b1' })], [], DEF_CFG);
+  assert.equal(l.length, 0);
+  assert.equal(buildOT(l).length, 0);
+});

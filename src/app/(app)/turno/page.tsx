@@ -18,7 +18,9 @@ export default function Turno() {
   const { fecha, turno: t } = turno;
   const ls = useMemo(() => L.filter((x) => x.fecha === fecha && x.turno === t), [L, fecha, t]);
   const s = sumL(ls), activas = maqs().filter((m) => (m.estado || 'Activa') === 'Activa');
-  const rep = activas.filter((m) => ls.some((x) => x.maquina_id === m.id)).length;
+  const incs = new Map<string, string>();
+  for (const l of S.reportes.find((r) => r.fecha === fecha && r.turno === t)?.reporte_lineas || []) if (l.incidencia) incs.set(l.maquina_id, l.incidencia);
+  const rep = activas.filter((m) => ls.some((x) => x.maquina_id === m.id) || incs.has(m.id)).length;
   const step = (d: 1 | -1) => setTurno(stepShift(fecha, t, d));
 
   return (
@@ -47,13 +49,13 @@ export default function Turno() {
               {lm.map((m) => {
                 const mine = ls.filter((x) => x.maquina_id === m.id), ms = sumL(mine), ph = paroH(S.paros, m.id, fecha, t, cfg);
                 return (
-                  <button key={m.id} className={`card mach ${mine.length ? '' : 'vacio'}`} onClick={() => setCap(m.id)}>
-                    <div className="nm"><b>{m.nombre}</b>{mine.length ? <Pill c={cls(ms.pct, cfg)}>{pctTxt(ms.pct)}</Pill> : <Pill>Sin reporte</Pill>}</div>
+                  <button key={m.id} className={`card mach ${mine.length || incs.has(m.id) ? '' : 'vacio'}`} onClick={() => setCap(m.id)}>
+                    <div className="nm"><b>{m.nombre}</b>{mine.length ? <Pill c={cls(ms.pct, cfg)}>{pctTxt(ms.pct)}</Pill> : incs.has(m.id) ? <Pill c="warn">{incs.get(m.id) === 'sin_operador' ? 'Faltó operador' : 'No trabajó'}</Pill> : <Pill>Sin reporte</Pill>}</div>
                     {mine.map((x) => <div className="ln" key={x.id}><span>{x.cliente || '—'} <span className="mut">{lineMed(x)}</span></span><span className="mut">{x.operario}</span></div>)}
                     {mine.length ? (<>
                       <div className="row" style={{ justifyContent: 'space-between' }}><span className="mono">{fmt(ms.kg)} kg</span><span className="mut">{ms.exp ? 'de ' + fmt(ms.exp) : 'sin teórico'}</span></div>
                       <Bar p={ms.pct || 0} c={cls(ms.pct, cfg)} />
-                    </>) : <span className="mut">Toca para capturar el reporte</span>}
+                    </>) : incs.has(m.id) ? <span className="mut">No cuenta en las estadísticas</span> : <span className="mut">Toca para capturar el reporte</span>}
                     {ph > 0 && <span className="pill warn" style={{ alignSelf: 'flex-start' }}>paro {fmt(ph, 1)} h</span>}
                   </button>
                 );
@@ -76,7 +78,7 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
   const ords = S.ordenes.filter((o) => o.estado !== 'Terminada'), b = m.tipo === 'bolseo';
   const mk = (): Draft => {
     const prev = L.filter((x) => x.maquina_id === m.id).sort((a, c) => (c.fecha + c.turno).localeCompare(a.fecha + a.turno))[0];
-    return { key: Math.random().toString(36).slice(2), maquina_id: m.id, orden_id: null, cliente: prev?.cliente || '', ancho: prev?.ancho ?? null, largo: prev?.largo ?? null, calibre: prev?.calibre ?? null, densidad: prev?.densidad || 'baja', golpes: prev?.golpes ?? null, carriles: prev?.carriles ?? null, kgh: prev?.kgh ?? null, horas: null, operario: '', kilos: null as unknown as number, nota: '', justificada: false };
+    return { key: Math.random().toString(36).slice(2), maquina_id: m.id, orden_id: null, cliente: prev?.cliente || '', ancho: prev?.ancho ?? null, largo: prev?.largo ?? null, calibre: prev?.calibre ?? null, densidad: prev?.densidad || 'baja', golpes: prev?.golpes ?? null, carriles: prev?.carriles ?? null, kgh: prev?.kgh ?? null, horas: null, operario: '', kilos: null as unknown as number, nota: '', justificada: false, incidencia: null };
   };
   const [lines, setLines] = useState<Draft[]>(() => {
     const ex = (rep?.reporte_lineas || []).filter((l) => l.maquina_id === m.id).map((l) => ({ ...l, key: l.id }));
@@ -103,7 +105,7 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
     toast('Producción borrada'); refresh(); onClose();
   }
   async function save() {
-    if (lines.some((l) => !l.operario.trim() || l.kilos == null || Number.isNaN(Number(l.kilos)))) return toast('Falta el operador o los kilos.', true);
+    if (lines.some((l) => !l.incidencia && (!l.operario.trim() || l.kilos == null || Number.isNaN(Number(l.kilos))))) return toast('Falta el operador o los kilos.', true);
     setBusy(true);
     let r: { id: string } | null = rep ? { id: rep.id } : ((await db.from('reportes').select('id').eq('fecha', fecha).eq('turno', t).maybeSingle()).data as { id: string } | null);
     if (!r) {
@@ -115,13 +117,13 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
     const old = (rep?.reporte_lineas || []).filter((l) => l.maquina_id === m.id).map((l) => l.id);
     const del = old.filter((id) => !keep.includes(id));
     if (del.length) { const e = await db.from('reporte_lineas').delete().in('id', del); if (e.error) { setBusy(false); return toast(e.error.message, true); } }
-    const rows = lines.map(({ key: _k, created_by: _cb, created_at: _ca, ...l }) => ({ ...l, operario: l.operario.trim(), cliente: (l.cliente || '').trim(), nota: (l.nota || '').trim(), reporte_id: r.id, maquina_id: m.id }));
+    const rows = lines.map(({ key: _k, created_by: _cb, created_at: _ca, ...l }) => ({ ...l, incidencia: l.incidencia || null, kilos: l.incidencia ? 0 : l.kilos, operario: l.operario.trim() || (l.incidencia === 'sin_operador' ? 'Sin operador' : '—'), cliente: (l.cliente || '').trim(), nota: (l.nota || '').trim(), reporte_id: r.id, maquina_id: m.id }));
     const upd = rows.filter((x) => x.id), ins = rows.filter((x) => !x.id).map(({ id: _i, ...x }) => x);
     let ok = true;
     for (const { id, reporte_id: _r, ...campos } of upd) { if (ok) ok = await run(db.from('reporte_lineas').update(campos).eq('id', id as string)); }
     if (ok && ins.length) ok = await run(db.from('reporte_lineas').insert(ins));
     if (ok) {
-      for (const l of lines) if (!S.personas.some((p) => p.nombre.toLowerCase() === l.operario.trim().toLowerCase()))
+      for (const l of lines) if (!l.incidencia && !S.personas.some((p) => p.nombre.toLowerCase() === l.operario.trim().toLowerCase()))
         await db.from('personas').insert({ nombre: l.operario.trim(), rol: 'operador', area: m.tipo });
       toast('Reporte guardado'); onClose();
     }
@@ -134,7 +136,22 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
       {bloqueado && <div className="banner" style={{ marginBottom: 12 }}>🔒 Este reporte ya se cerró (pasaron más de {VENTANA_MIN} minutos). Para cambiarlo, pide autorización al dueño.</div>}
       {!isDueno && !bloqueado && aut && aut.vence_at && <div className="banner" style={{ marginBottom: 12 }}>✅ El dueño autorizó el cambio hasta las {hhmm(aut.vence_at)}.</div>}
       <datalist id="dl_oper">{S.personas.filter((p) => p.rol === 'operador').map((p) => <option key={p.id} value={p.nombre} />)}</datalist>
-      {lines.map((l, i) => {
+      {lines.length === 1 && (
+        <div className="row" style={{ gap: 18, marginBottom: 12, flexWrap: 'wrap' }}>
+          <ChkF l="Faltó el operador" v={lines[0].incidencia === 'sin_operador'} on={(v) => set(0, { incidencia: v ? 'sin_operador' : null })} />
+          <ChkF l="La máquina no trabajó este turno" v={lines[0].incidencia === 'sin_trabajo'} on={(v) => set(0, { incidencia: v ? 'sin_trabajo' : null })} />
+        </div>
+      )}
+      {lines[0]?.incidencia && lines.length === 1 ? (
+        <fieldset disabled={bloqueado && !!lines[0].id}>
+          <legend>{lines[0].incidencia === 'sin_operador' ? 'Inasistencia del operador' : 'Máquina sin trabajar'}</legend>
+          <div className="fg">
+            {lines[0].incidencia === 'sin_operador' && <Fld l="¿Quién faltó? (opcional)"><input list="dl_oper" autoComplete="off" value={lines[0].operario === 'Sin operador' ? '' : lines[0].operario} onChange={(e) => set(0, { operario: e.target.value })} /></Fld>}
+            <TxtF l="Nota" v={lines[0].nota} on={(v) => set(0, { nota: v })} />
+          </div>
+          <p className="mut" style={{ marginTop: 10 }}>Este turno no cuenta en las estadísticas de la máquina ni del operador.</p>
+        </fieldset>
+      ) : lines.map((l, i) => {
         const kgh = lineKgh(l, m), share = all ? hs[i] / tot : 1 / n, exp = kgh ? kgh * heff * share : null, pct = exp && l.kilos != null ? l.kilos / exp : null;
         const pickOrden = (id: string) => {
           const o = S.ordenes.find((x) => x.id === id);
