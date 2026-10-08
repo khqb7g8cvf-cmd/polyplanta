@@ -4,11 +4,12 @@ import { useData } from '@/lib/data';
 import { AREAS, CAUSAS } from '@/lib/calc';
 import { dmy, fmtDur, hhmm, localDT } from '@/lib/format';
 import { AreaF, Empty, Fld, Modal, Pill, Scroll, SelF } from '@/components/ui';
+import PedirCambio, { type RefCambio } from '@/components/PedirCambio';
 import type { Paro } from '@/lib/types';
 
 export default function Paros() {
   const { S, now, maqById, canProd, run, db, quien, isDueno } = useData();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false), [pedir, setPedir] = useState<RefCambio | null>(null);
   const abiertos = S.paros.filter((p) => !p.fin).sort((a, b) => a.inicio.localeCompare(b.inicio));
   const cut = new Date(now - 7 * 864e5).toISOString(), rec = S.paros.filter((p) => p.fin && p.inicio >= cut).sort((a, b) => b.inicio.localeCompare(a.inicio));
   const tbl = (L: Paro[]) => (
@@ -16,7 +17,7 @@ export default function Paros() {
       {L.map((p) => (
         <tr key={p.id}><td>{maqById(p.maquina_id)?.nombre || '?'}</td><td><Pill c={p.causa === 'Mecánico' ? 'bad' : ''}>{p.causa}</Pill></td><td className="mono">{dmy(p.inicio)} {hhmm(p.inicio)}</td>
           <td className="num">{fmtDur((p.fin ? Date.parse(p.fin) : now) - Date.parse(p.inicio))}</td><td>{p.nota || ''}</td><td>{quien(p.created_by)}</td>
-          <td style={{ whiteSpace: 'nowrap' }}>{!p.fin && canProd && <button className="btn sm" onClick={() => run(db.from('paros').update({ fin: new Date().toISOString() }).eq('id', p.id), 'Máquina reanudada')}>Reanudar</button>}{isDueno && <>{' '}<button className="btn sm danger" onClick={() => confirm(`¿Borrar el paro de ${maqById(p.maquina_id)?.nombre || 'la máquina'} (${p.causa})? Queda en la bitácora.`) && run(db.from('paros').delete().eq('id', p.id), 'Paro borrado')}>Borrar</button></>}</td></tr>))}
+          <td style={{ whiteSpace: 'nowrap' }}>{!p.fin && canProd && <button className="btn sm" onClick={() => run(db.from('paros').update({ fin: new Date().toISOString() }).eq('id', p.id), 'Máquina reanudada')}>Reanudar</button>}{canProd && !isDueno && <>{' '}<button className="btn sm" onClick={() => setPedir({ tabla: 'paros', registro_id: p.id, resumen: `Paro de ${maqById(p.maquina_id)?.nombre || 'máquina'} · ${p.causa} · ${dmy(p.inicio)} ${hhmm(p.inicio)}` })}>Pedir cambio</button></>}{isDueno && <>{' '}<button className="btn sm danger" onClick={() => confirm(`¿Borrar el paro de ${maqById(p.maquina_id)?.nombre || 'la máquina'} (${p.causa})? Queda en la bitácora.`) && run(db.from('paros').delete().eq('id', p.id), 'Paro borrado')}>Borrar</button></>}</td></tr>))}
     </tbody></table></Scroll>
   );
   return (
@@ -25,6 +26,7 @@ export default function Paros() {
         <h3 style={{ marginBottom: 6 }}>Abiertos ({abiertos.length})</h3>{abiertos.length ? tbl(abiertos) : <Empty>Ninguna máquina detenida ahora.</Empty>}</section>
       <section className="sec"><h2>Últimos 7 días</h2>{rec.length ? tbl(rec) : <Empty>Todavía no hay paros cerrados. Cada paro registrado aquí alimenta el análisis de causas.</Empty>}</section>
       {open && <ParoForm onClose={() => setOpen(false)} />}
+      {pedir && <PedirCambio r={pedir} onClose={() => setPedir(null)} />}
     </>
   );
 }

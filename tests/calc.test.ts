@@ -90,3 +90,16 @@ test('proveedores: precio ponderado y salidas por motivo', () => {
   assert.equal(p[0].promedio, 33); assert.equal(p[0].ultimo, 34);
   assert.equal(salidasPor([mv({ motivo: 'merma' }), mv({ motivo: 'merma', delta_kg: -100 })], (m) => m.motivo || 'sin')[0].kg, 400);
 });
+
+import { lineaLibre, autorizacion } from '../src/lib/permisos.ts';
+test('candado: 15 minutos o autorización vigente', () => {
+  const now = Date.parse('2026-10-08T18:00:00Z');
+  const l = { created_by: 'u1', created_at: '2026-10-08T17:50:00Z', reporte_id: 'r1', maquina_id: 'b1' };
+  assert.equal(lineaLibre(l, 'u1', [], now), true);
+  assert.equal(lineaLibre({ ...l, created_at: '2026-10-08T17:40:00Z' }, 'u1', [], now), false);
+  assert.equal(lineaLibre(l, 'u2', [], now), false);
+  const s = { id: 's', tabla: 'reporte_lineas', registro_id: null, reporte_id: 'r1', maquina_id: 'b1', resumen: '', motivo: 'x', estado: 'aprobada' as const, solicitada_por: 'u2', solicitada_at: '', resuelta_por: null, resuelta_at: null, vence_at: '2026-10-08T18:30:00Z' };
+  assert.equal(lineaLibre({ ...l, created_at: '2026-10-08T17:00:00Z' }, 'u2', [s], now), true);
+  assert.ok(autorizacion([s], 'r1', 'b1', 'u2', now));
+  assert.equal(autorizacion([s], 'r1', 'b1', 'u2', Date.parse('2026-10-08T19:00:00Z')), undefined);
+});

@@ -4,13 +4,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabaseBrowser } from './supabase/client';
 import { buildLineas, buildOT, DEF_CFG, lastDone } from './calc';
 import { daysAgo } from './format';
-import type { Amon, Cfg, LineaCalc, Maquina, Material, Mtto, Movimiento, Orden, OpTurno, Paro, Persona, Profile, Reporte } from './types';
+import type { Amon, Cfg, LineaCalc, Maquina, Material, Mtto, Movimiento, Orden, OpTurno, Paro, Persona, Profile, Reporte, SolicitudCambio } from './types';
 
 export interface Store {
   maquinas: Maquina[]; personas: Persona[]; ordenes: Orden[]; reportes: Reporte[]; paros: Paro[]; mtto: Mtto[];
-  amon: Amon[]; materiales: Material[]; movs: Movimiento[]; existencias: Record<string, number>; existUb: Record<string, { silo: number; sacos: number }>; usuarios: Profile[];
+  amon: Amon[]; materiales: Material[]; movs: Movimiento[]; existencias: Record<string, number>; existUb: Record<string, { silo: number; sacos: number }>; usuarios: Profile[]; solicitudes: SolicitudCambio[];
 }
-const EMPTY: Store = { maquinas: [], personas: [], ordenes: [], reportes: [], paros: [], mtto: [], amon: [], materiales: [], movs: [], existencias: {}, existUb: {}, usuarios: [] };
+const EMPTY: Store = { maquinas: [], personas: [], ordenes: [], reportes: [], paros: [], mtto: [], amon: [], materiales: [], movs: [], existencias: {}, existUb: {}, usuarios: [], solicitudes: [] };
 
 interface Ctx {
   db: SupabaseClient; S: Store; cfg: Cfg; me: Profile | null; loaded: boolean; live: boolean;
@@ -69,6 +69,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       db.from('profiles').select('*').order('created_at'),
       db.from('inv_existencias_ub').select('*'),
       db.from('inv_costos').select('*'),
+      db.from('solicitudes_cambio').select('*').order('solicitada_at', { ascending: false }).limit(300),
     ]);
     const err = q.find((r) => r.error)?.error;
     if (err) { console.error(err); setLive(false); toast('No se pudo leer la base de datos: ' + err.message, true); setLoaded(true); return; }
@@ -82,7 +83,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setS({
       maquinas: (q[0].data as Maquina[]) || [], personas: (q[1].data as Persona[]) || [], ordenes: (q[3].data as Orden[]) || [],
       reportes: (q[4].data as Reporte[]) || [], paros: (q[5].data as Paro[]) || [], mtto: (q[6].data as Mtto[]) || [], amon: (q[7].data as Amon[]) || [],
-      materiales: (q[8].data as Material[]) || [], movs: ((q[9].data as Movimiento[]) || []).map((m) => ({ ...m, costo_kg: costos.get(m.id) ?? null })), existencias: ex, existUb: ub, usuarios: (q[12].data as Profile[]) || [],
+      materiales: (q[8].data as Material[]) || [], movs: ((q[9].data as Movimiento[]) || []).map((m) => ({ ...m, costo_kg: costos.get(m.id) ?? null })), existencias: ex, existUb: ub, usuarios: (q[12].data as Profile[]) || [], solicitudes: (q[15].data as SolicitudCambio[]) || [],
     });
     setMe((q[11].data as Profile) || null);
     setLoaded(true); setLive(true);
@@ -97,7 +98,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void load();
     const ch = db.channel('planta');
-    for (const t of ['maquinas', 'personas', 'config', 'ordenes', 'reportes', 'reporte_lineas', 'paros', 'mtto', 'amonestaciones', 'materiales', 'inv_movimientos', 'inv_costos', 'profiles'])
+    for (const t of ['maquinas', 'personas', 'config', 'ordenes', 'reportes', 'reporte_lineas', 'paros', 'mtto', 'amonestaciones', 'materiales', 'inv_movimientos', 'inv_costos', 'solicitudes_cambio', 'profiles'])
       ch.on('postgres_changes', { event: '*', schema: 'public', table: t }, refresh);
     ch.subscribe((s) => { if (s === 'CHANNEL_ERROR' || s === 'TIMED_OUT') setLive(false); });
     const iv = setInterval(() => setNow(Date.now()), 30000);

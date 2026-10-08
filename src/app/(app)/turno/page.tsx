@@ -2,9 +2,11 @@
 import { useMemo, useState } from 'react';
 import { useData } from '@/lib/data';
 import { AREAS, cls, gapTxt, lineKgh, paroH, pctTxt, shiftWin, stepShift, sumL } from '@/lib/calc';
-import { fmt, ymd } from '@/lib/format';
+import { fmt, hhmm, ymd } from '@/lib/format';
 import { Bar, ChkF, DateF, Modal, NumF, Pill, SelF, Tile, TxtF, Fld } from '@/components/ui';
 import { lineMed, shiftName, useMoney } from '@/components/shared';
+import PedirCambio from '@/components/PedirCambio';
+import { autorizacion, lineaLibre, pendiente, VENTANA_MIN } from '@/lib/permisos';
 import type { LineaRow, Maquina, Tipo } from '@/lib/types';
 
 type Draft = Omit<LineaRow, 'reporte_id' | 'id'> & { id?: string; key: string };
@@ -68,7 +70,7 @@ export default function Turno() {
 }
 
 function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
-  const { S, L, cfg, turno, maqById, db, run, toast, canProd, isDueno, refresh } = useData();
+  const { S, L, cfg, turno, maqById, db, run, toast, canProd, isDueno, refresh, me } = useData();
   const { fecha, turno: t } = turno, m = maqById(maqId) as Maquina;
   const rep = S.reportes.find((r) => r.fecha === fecha && r.turno === t);
   const ords = S.ordenes.filter((o) => o.estado !== 'Terminada'), b = m.tipo === 'bolseo';
@@ -89,6 +91,9 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
   const n = lines.length, hs = lines.map((l) => Number(l.horas) || 0), all = n > 1 && hs.every((x) => x > 0), tot = hs.reduce((x, y) => x + y, 0);
 
   const saved = (rep?.reporte_lineas || []).filter((l) => l.maquina_id === m.id);
+  const [pedir, setPedir] = useState(false), nowT = Date.now();
+  const bloqueado = !isDueno && saved.some((l) => !lineaLibre(l, me?.id, S.solicitudes, nowT));
+  const aut = autorizacion(S.solicitudes, rep?.id, m.id, me?.id, nowT), pend = pendiente(S.solicitudes, rep?.id, m.id, me?.id);
   async function borrarTodo() {
     if (!confirm(`¿Borrar la producción de ${m.nombre} de este turno (${saved.length} ${saved.length === 1 ? 'línea' : 'líneas'}, ${saved.map((l) => fmt(l.kilos)).join(' + ')} kg)? Queda en la bitácora.`)) return;
     setBusy(true);
@@ -100,15 +105,21 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
   async function save() {
     if (lines.some((l) => !l.operario.trim() || l.kilos == null || Number.isNaN(Number(l.kilos)))) return toast('Falta el operador o los kilos.', true);
     setBusy(true);
-    const { data: r, error } = await db.from('reportes').upsert({ fecha, turno: t }, { onConflict: 'fecha,turno' }).select('id').single();
-    if (error || !r) { setBusy(false); return toast(error?.message || 'No se pudo crear el reporte', true); }
+    let r: { id: string } | null = rep ? { id: rep.id } : ((await db.from('reportes').select('id').eq('fecha', fecha).eq('turno', t).maybeSingle()).data as { id: string } | null);
+    if (!r) {
+      const ins = await db.from('reportes').insert({ fecha, turno: t }).select('id').single();
+      if (ins.error || !ins.data) { setBusy(false); return toast(ins.error?.message || 'No se pudo crear el reporte', true); }
+      r = ins.data as { id: string };
+    }
     const keep = lines.filter((l) => l.id).map((l) => l.id as string);
     const old = (rep?.reporte_lineas || []).filter((l) => l.maquina_id === m.id).map((l) => l.id);
     const del = old.filter((id) => !keep.includes(id));
     if (del.length) { const e = await db.from('reporte_lineas').delete().in('id', del); if (e.error) { setBusy(false); return toast(e.error.message, true); } }
-    const rows = lines.map(({ key: _k, ...l }) => ({ ...l, operario: l.operario.trim(), cliente: (l.cliente || '').trim(), nota: (l.nota || '').trim(), reporte_id: r.id, maquina_id: m.id }));
+    const rows = lines.map(({ key: _k, created_by: _cb, created_at: _ca, ...l }) => ({ ...l, operario: l.operario.trim(), cliente: (l.cliente || '').trim(), nota: (l.nota || '').trim(), reporte_id: r.id, maquina_id: m.id }));
     const upd = rows.filter((x) => x.id), ins = rows.filter((x) => !x.id).map(({ id: _i, ...x }) => x);
-    const ok = (!upd.length || (await run(db.from('reporte_lineas').upsert(upd)))) && (!ins.length || (await run(db.from('reporte_lineas').insert(ins))));
+    let ok = true;
+    for (const { id, reporte_id: _r, ...campos } of upd) { if (ok) ok = await run(db.from('reporte_lineas').update(campos).eq('id', id as string)); }
+    if (ok && ins.length) ok = await run(db.from('reporte_lineas').insert(ins));
     if (ok) {
       for (const l of lines) if (!S.personas.some((p) => p.nombre.toLowerCase() === l.operario.trim().toLowerCase()))
         await db.from('personas').insert({ nombre: l.operario.trim(), rol: 'operador', area: m.tipo });
@@ -118,8 +129,10 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
   }
 
   return (
-    <Modal title={'Reporte · ' + m.nombre} onClose={onClose} foot={<>{isDueno && saved.length > 0 && <button className="btn danger" style={{ marginRight: 'auto' }} disabled={busy} onClick={borrarTodo}>Borrar esta producción</button>}<button className="btn" onClick={onClose}>Cancelar</button><button className="btn primary" disabled={!canProd || busy} onClick={save}>Guardar reporte</button></>}>
+    <Modal title={'Reporte · ' + m.nombre} onClose={onClose} foot={<>{isDueno && saved.length > 0 && <button className="btn danger" style={{ marginRight: 'auto' }} disabled={busy} onClick={borrarTodo}>Borrar esta producción</button>}<button className="btn" onClick={onClose}>Cancelar</button>{bloqueado ? (pend ? <span className="mut">Solicitud enviada, esperando al dueño</span> : <button className="btn primary" onClick={() => setPedir(true)}>Pedir cambio al dueño</button>) : <button className="btn primary" disabled={!canProd || busy} onClick={save}>Guardar reporte</button>}</>}>
       <p className="mut" style={{ margin: '0 0 12px' }}>{m.nombre} · {shiftName(fecha, t)}. {ps.length ? <>Paros registrados en este turno: {ps.map((p, i) => <span key={p.id}>{i ? ', ' : ''}<b>{p.causa}</b> {fmt(paroH([p], m.id, fecha, t, cfg), 1)} h{exc.has(p.causa) ? ' (se descuenta de la meta)' : ' (no se descuenta)'}</span>)}.</> : 'Sin paros registrados en este turno.'}</p>
+      {bloqueado && <div className="banner" style={{ marginBottom: 12 }}>🔒 Este reporte ya se cerró (pasaron más de {VENTANA_MIN} minutos). Para cambiarlo, pide autorización al dueño.</div>}
+      {!isDueno && !bloqueado && aut && aut.vence_at && <div className="banner" style={{ marginBottom: 12 }}>✅ El dueño autorizó el cambio hasta las {hhmm(aut.vence_at)}.</div>}
       <datalist id="dl_oper">{S.personas.filter((p) => p.rol === 'operador').map((p) => <option key={p.id} value={p.nombre} />)}</datalist>
       {lines.map((l, i) => {
         const kgh = lineKgh(l, m), share = all ? hs[i] / tot : 1 / n, exp = kgh ? kgh * heff * share : null, pct = exp && l.kilos != null ? l.kilos / exp : null;
@@ -128,7 +141,7 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
           set(i, o ? { orden_id: id, cliente: o.cliente, ancho: (b ? o.bolsa_ancho : o.ancho_ext) ?? l.ancho, largo: o.bolsa_largo ?? l.largo, calibre: o.calibre ?? l.calibre, densidad: o.densidad || 'baja' } : { orden_id: null });
         };
         return (
-          <fieldset key={l.key}>
+          <fieldset key={l.key} disabled={bloqueado && !!l.id}>
             <legend>{n > 1 ? 'Orden ' + (i + 1) : 'Producción del turno'}</legend>
             <div className="fg">
               {ords.length > 0 && <SelF l="Orden programada (opcional)" v={l.orden_id || ''} on={pickOrden} opts={[['', '— capturar a mano —'], ...ords.map((o): [string, string] => [o.id, `${o.folio} · ${o.cliente}`])]} />}
@@ -160,7 +173,8 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
           </fieldset>
         );
       })}
-      <button className="btn" onClick={() => setLines((a) => [...a, mk()])}>+ Otra orden en esta máquina</button>
+      {!bloqueado && <button className="btn" onClick={() => setLines((a) => [...a, mk()])}>+ Otra orden en esta máquina</button>}
+      {pedir && <PedirCambio r={{ tabla: 'reporte_lineas', reporte_id: rep?.id, maquina_id: m.id, resumen: `Producción de ${m.nombre} · ${shiftName(fecha, t)} · ${saved.map((l) => fmt(l.kilos) + ' kg').join(' + ')}` }} onClose={() => setPedir(false)} />}
     </Modal>
   );
 }

@@ -6,6 +6,7 @@ import { conciliacion, existenciaDiaria, kardex, MOTIVOS, motivoTxt, proveedores
 import { diasEntre } from '@/lib/analytics';
 import { ChartCard, Columns, HBars, LineChart, Spark, descargarCSV, SERIES } from '@/components/charts';
 import { AreaF, Empty, Fld, Modal, NumF, Pill, Scroll, SelF, Tile, TxtF } from '@/components/ui';
+import PedirCambio, { type RefCambio } from '@/components/PedirCambio';
 import type { Material, Movimiento } from '@/lib/types';
 
 const CAT: [string, string][] = [['resina', 'Resina'], ['reciclado', 'Reciclado'], ['masterbatch', 'Masterbatch / pigmento'], ['aditivo', 'Aditivo']];
@@ -77,8 +78,8 @@ export default function Inventario() {
 const tipoPill = (t: string) => <Pill c={t === 'entrada' ? 'good' : t === 'salida' ? 'ink' : 'warn'}>{t}</Pill>;
 
 function Kardex() {
-  const { S, isDueno, maqById, ordById, quien, run, db, now } = useData();
-  const [em, setEm] = useState<Movimiento | null>(null);
+  const { S, isDueno, canProd, maqById, ordById, quien, run, db, now } = useData();
+  const [em, setEm] = useState<Movimiento | null>(null), [pedir, setPedir] = useState<RefCambio | null>(null);
   const [f, setF] = useState({ mat: '', lugar: '', tipo: '', motivo: '', user: '', desde: daysAgo(29), hasta: ymd(new Date(now)), q: '' });
   const p = (k: Partial<typeof f>) => setF((s) => ({ ...s, ...k }));
   const matBy = (id: string) => S.materiales.find((m) => m.id === id)?.nombre || '?';
@@ -125,13 +126,14 @@ function Kardex() {
               <td>{motivoTxt(x.motivo, x.tipo)}</td><td>{destino(x) || <span className="mut">—</span>}{x.nota && <div className="mut">{x.nota}</div>}</td>
               <td>{[x.proveedor, x.lote && `lote ${x.lote}`, x.factura && `fact. ${x.factura}`, x.costo_kg && `$${fmt(x.costo_kg, 2)}/kg`].filter(Boolean).join(' · ') || <span className="mut">—</span>}</td>
               <td><b>{quien(x.created_by)}</b><div className="mut">{x.created_at ? `${dmy(x.created_at)} ${hhmm(x.created_at)}` : ''}</div></td>
-              <td style={{ whiteSpace: 'nowrap' }}>{isDueno && <><button className="btn sm" onClick={() => setEm(x)}>Editar</button>{' '}</>}{isDueno && <button className="btn sm danger" onClick={() => confirm('¿Anular este movimiento? Cambia la existencia y queda en la bitácora.') && run(db.from('inv_movimientos').delete().eq('id', x.id), 'Movimiento anulado')}>Anular</button>}</td>
+              <td style={{ whiteSpace: 'nowrap' }}>{isDueno && <><button className="btn sm" onClick={() => setEm(x)}>Editar</button>{' '}</>}{canProd && !isDueno && <button className="btn sm" onClick={() => setPedir({ tabla: 'inv_movimientos', registro_id: x.id, resumen: `${x.tipo} de ${matBy(x.material_id)} · ${fmt(Math.abs(x.delta_kg), 1)} kg · ${dmy(x.fecha)} ${hhmm(x.fecha)}` })}>Pedir cambio</button>}{isDueno && <button className="btn sm danger" onClick={() => confirm('¿Anular este movimiento? Cambia la existencia y queda en la bitácora.') && run(db.from('inv_movimientos').delete().eq('id', x.id), 'Movimiento anulado')}>Anular</button>}</td>
             </tr>))}
         </tbody>
           <tfoot><tr><td colSpan={4}><b>Totales del filtro ({fmt(vis.length)})</b></td><td className="num" style={{ color: 'var(--good)' }}><b>{fmt(ent, 1)}</b></td><td className="num" style={{ color: 'var(--bad)' }}><b>{fmt(sal, 1)}</b></td><td className="num"><b>{ent - sal >= 0 ? '+' : ''}{fmt(ent - sal, 1)}</b></td><td colSpan={5} className="mut">neto del periodo (kg)</td></tr></tfoot>
         </table></Scroll>
       ) : <Empty>No hay movimientos con estos filtros.</Empty>}
       {em && <EditMov x={em} onClose={() => setEm(null)} />}
+      {pedir && <PedirCambio r={pedir} onClose={() => setPedir(null)} />}
       {vis.length > 500 && <p className="mut">Mostrando 500 de {fmt(vis.length)}. Usa los filtros o el CSV.</p>}
     </section>
   );

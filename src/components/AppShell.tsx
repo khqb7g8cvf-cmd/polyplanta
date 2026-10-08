@@ -16,6 +16,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { live, loaded, me, toastMsg, S, now, toast, isDueno } = useData();
   const [pw, setPw] = useState<string | null>(null);
   const path = usePathname(), r = useRouter();
+  const solPend = S.solicitudes.filter((x) => x.estado === 'pendiente').length;
   const bajos = resumenMateriales(S.materiales, S.existencias, S.movs, now, S.existUb).filter((x) => x.bajo).length;
   return (
     <div className="wrap">
@@ -35,7 +36,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <nav className="tabs" role="tablist">
           {(isDueno ? [...TABS, ...TAB_DUENO] : TABS).map(([h, t]) => (
             <Link key={h} href={h} role="tab" aria-selected={h === '/' ? path === '/' : path.startsWith(h)} style={{ textDecoration: 'none' }}>
-              <button tabIndex={-1}>{t}{h === '/inventario' && bajos > 0 ? ` · ${fmt(bajos)}` : ''}</button>
+              <button tabIndex={-1}>{t}{h === '/inventario' && bajos > 0 ? ` · ${fmt(bajos)}` : ''}{h === '/' && isDueno && solPend > 0 ? ` · ${fmt(solPend)}` : ''}</button>
             </Link>
           ))}
         </nav>

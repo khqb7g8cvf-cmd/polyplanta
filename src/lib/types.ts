@@ -40,6 +40,10 @@ export interface Movimiento {
   lote: string | null; proveedor: string | null; factura: string | null; costo_kg: number | null; maquina_id: string | null; orden_id: string | null; nota: string | null;
   ubicacion: 'silo' | 'sacos'; motivo: string | null; referencia: string | null; created_by: string | null; created_at: string;
 }
+export interface SolicitudCambio {
+  id: string; tabla: string; registro_id: string | null; reporte_id: string | null; maquina_id: string | null; resumen: string; motivo: string;
+  estado: 'pendiente' | 'aprobada' | 'rechazada' | 'atendida'; solicitada_por: string; solicitada_at: string; resuelta_por: string | null; resuelta_at: string | null; vence_at: string | null;
+}
 export interface Profile { id: string; nombre: string; usuario: string | null; rol: Rol; activo: boolean; created_at?: string }
 
 /** Línea de reporte con lo que debía producirse ya calculado. */

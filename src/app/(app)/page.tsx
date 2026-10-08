@@ -7,10 +7,11 @@ import { dmy, fmt, fmtDur, hhmm, today } from '@/lib/format';
 import { resumenMateriales } from '@/lib/inv';
 import { Empty, Pill, Tile } from '@/components/ui';
 import { LinesTable, Trend, shiftName, useMoney } from '@/components/shared';
+import Solicitudes from '@/components/Solicitudes';
 import type { Tipo } from '@/lib/types';
 
 export default function Hoy() {
-  const { S, L, OT, cfg, now, maqById, run, db, canProd, setTurno } = useData();
+  const { S, L, OT, cfg, now, maqById, run, db, canProd, setTurno, isDueno } = useData();
   const r = useRouter(), money = useMoney();
   const hoy = today(), ab = S.paros.filter((p) => !p.fin), mAb = S.mtto.filter((x) => x.estado !== 'Cerrada');
   const venc = mAb.filter((x) => x.tipo === 'preventivo' && x.programada && x.programada < hoy);
@@ -23,6 +24,7 @@ export default function Hoy() {
 
   return (
     <>
+      {isDueno && <Solicitudes />}
       <section className="sec">
         <h2>{new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}</h2>
         {!last ? (
