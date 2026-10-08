@@ -40,7 +40,7 @@ test('ya sancionado no repite', () => {
   assert.equal(opAll(ot(), a, DEF_CFG, now)[0].sug, null);
 });
 
-const mat: Material = { id: 'x', nombre: 'PEBD', categoria: 'resina', kg_por_saco: 25, minimo_kg: 1000, silo_kg: null, activo: true };
+const mat: Material = { id: 'x', nombre: 'PEBD', categoria: 'resina', kg_por_saco: 25, minimo_kg: 1000, silo_kg: null, codigo: null, fabricante: null, activo: true };
 const mv = (o: Partial<Movimiento>): Movimiento => ({ id: Math.random() + '', material_id: 'x', tipo: 'salida', fecha: '2026-10-05T10:00:00', delta_kg: -300, sacos: null, lote: null, proveedor: null, factura: null, costo_kg: null, maquina_id: null, orden_id: null, nota: null, ubicacion: 'sacos', motivo: null, referencia: null, created_by: null, created_at: '2026-10-05T10:00:00', ...o });
 
 test('inventario: cobertura, mínimo, costo', () => {

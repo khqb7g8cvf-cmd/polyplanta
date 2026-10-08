@@ -34,7 +34,7 @@ export interface Cfg {
   horasProd: number; turno1Inicio: number; umbralBajo: number; umbralRec: number; ventanaDias: number;
   nEscrita: number; nActa: number; nReconoc: number; margenKg: number | null; excusadas: string[];
 }
-export interface Material { id: string; nombre: string; categoria: 'resina' | 'reciclado' | 'masterbatch' | 'aditivo'; kg_por_saco: number; minimo_kg: number; silo_kg: number | null; activo: boolean }
+export interface Material { id: string; nombre: string; categoria: 'resina' | 'reciclado' | 'masterbatch' | 'aditivo'; kg_por_saco: number; minimo_kg: number; silo_kg: number | null; codigo: string | null; fabricante: string | null; activo: boolean }
 export interface Movimiento {
   id: string; material_id: string; tipo: 'entrada' | 'salida' | 'ajuste'; fecha: string; delta_kg: number; sacos: number | null;
   lote: string | null; proveedor: string | null; factura: string | null; costo_kg: number | null; maquina_id: string | null; orden_id: string | null; nota: string | null;

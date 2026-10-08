@@ -6,7 +6,7 @@ import { AreaF, DateF, Empty, Fld, Modal, NumF, Pill, Scroll, SelF, Tile } from 
 import type { Mtto } from '@/lib/types';
 
 export default function Mtto_() {
-  const { S, maqById, canMtto, run, db } = useData();
+  const { S, maqById, canMtto, run, db, isDueno } = useData();
   const [filtro, setFiltro] = useState<'abiertos' | 'cerrados'>('abiertos');
   const [nuevo, setNuevo] = useState(false), [cierra, setCierra] = useState<Mtto | null>(null);
   const hoy = today(), ab = S.mtto.filter((x) => x.estado !== 'Cerrada'), ce = S.mtto.filter((x) => x.estado === 'Cerrada');
@@ -34,7 +34,7 @@ export default function Mtto_() {
                 <td className="mono" style={late ? { color: 'var(--bad)', fontWeight: 600 } : undefined}>{dmy(filtro === 'abiertos' ? x.programada : x.cierre)}</td>
                 <td><Pill c={x.estado === 'En proceso' ? 'good' : x.estado === 'Cerrada' ? '' : 'ink'}>{x.estado}</Pill></td>
                 <td>{canMtto && x.estado === 'Abierta' && <><button className="btn sm" onClick={() => run(db.from('mtto').update({ estado: 'En proceso', inicio: new Date().toISOString() }).eq('id', x.id))}>Tomar</button>{' '}</>}
-                  {canMtto && x.estado !== 'Cerrada' && <button className="btn sm" onClick={() => setCierra(x)}>Cerrar</button>}</td></tr>);
+                  {canMtto && x.estado !== 'Cerrada' && <button className="btn sm" onClick={() => setCierra(x)}>Cerrar</button>}{isDueno && <>{' '}<button className="btn sm danger" onClick={() => confirm('¿Borrar esta orden de trabajo? Queda en la bitácora.') && run(db.from('mtto').delete().eq('id', x.id), 'Orden borrada')}>Borrar</button></>}</td></tr>);
           })}</tbody></table></Scroll>
       ) : <Empty>Sin órdenes de trabajo. Carga aquí tu lista de correctivos pendientes y arma los preventivos por máquina (con &quot;repetir cada N días&quot;).</Empty>}
       {nuevo && <Nueva onClose={() => setNuevo(false)} />}

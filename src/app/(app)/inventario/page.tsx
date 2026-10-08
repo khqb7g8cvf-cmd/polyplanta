@@ -47,7 +47,7 @@ export default function Inventario() {
             <Scroll><table className="t"><thead><tr><th>Material</th><th className="num">Existencia</th><th className="num">Sacos</th><th className="num">Mínimo</th><th>60 días</th><th className="num">Consumo/día</th><th className="num">Cobertura</th><th>Estado</th>{isDueno && <th className="num">$/kg</th>}<th></th></tr></thead><tbody>
               {res.map((r: MatResumen) => (
                 <tr key={r.m.id} className="click" onClick={() => setModo({ k: 'ficha', id: r.m.id })}>
-                  <td><b>{r.m.nombre}</b><div className="mut">{CAT.find((c) => c[0] === r.m.categoria)?.[1]}</div></td>
+                  <td><b>{r.m.nombre}</b><div className="mut">{[CAT.find((c) => c[0] === r.m.categoria)?.[1], r.m.fabricante, r.m.codigo && `cód. ${r.m.codigo}`].filter(Boolean).join(' · ')}</div></td>
                   <td className="num"><b>{fmt(r.kg)} kg</b>{r.m.silo_kg ? <div className="mut">silo {fmt(r.silo)} · sacos {fmt(r.enSacos)}</div> : null}</td><td className="num">{fmt(r.sacos, 1)}</td><td className="num">{fmt(r.m.minimo_kg)}</td>
                   <td><Spark values={existenciaDiaria(S.movs.filter((x) => x.material_id === r.m.id), r.kg, dias60)} color={r.bajo ? 'var(--bad)' : 'var(--s1)'} /></td>
                   <td className="num">{r.consumoDia ? fmt(r.consumoDia, 0) + ' kg' : '—'}</td>
@@ -395,16 +395,17 @@ function Conteo({ onClose }: { onClose: () => void }) {
 
 function Mat({ m, onClose }: { m?: Material; onClose: () => void }) {
   const { db, run, toast } = useData();
-  const [f, setF] = useState({ nombre: m?.nombre || '', categoria: m?.categoria || 'resina', kg_por_saco: m?.kg_por_saco ?? 25, minimo_kg: m?.minimo_kg ?? 0, silo_kg: m?.silo_kg ?? null, activo: m?.activo ?? true });
+  const [f, setF] = useState({ nombre: m?.nombre || '', categoria: m?.categoria || 'resina', kg_por_saco: m?.kg_por_saco ?? 25, minimo_kg: m?.minimo_kg ?? 0, silo_kg: m?.silo_kg ?? null, codigo: m?.codigo ?? '', fabricante: m?.fabricante ?? '', activo: m?.activo ?? true });
   async function save() {
     if (!f.nombre.trim()) return toast('Falta el nombre.', true);
-    const q = m ? db.from('materiales').update({ ...f, nombre: f.nombre.trim() }).eq('id', m.id) : db.from('materiales').insert({ ...f, nombre: f.nombre.trim() });
+    const q = m ? db.from('materiales').update({ ...f, nombre: f.nombre.trim(), codigo: f.codigo.trim() || null, fabricante: f.fabricante.trim() || null }).eq('id', m.id) : db.from('materiales').insert({ ...f, nombre: f.nombre.trim(), codigo: f.codigo.trim() || null, fabricante: f.fabricante.trim() || null });
     if (await run(q, 'Material guardado')) onClose();
   }
   return (
     <Modal title={m ? m.nombre : 'Nuevo material'} onClose={onClose} foot={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn primary" onClick={save}>Guardar</button></>}>
       <div className="fg">
         <TxtF l="Nombre" v={f.nombre} on={(v) => setF({ ...f, nombre: v })} /><SelF l="Categoría" v={f.categoria} on={(v) => setF({ ...f, categoria: v as Material['categoria'] })} opts={CAT} />
+        <TxtF l="Fabricante" v={f.fabricante} on={(v) => setF({ ...f, fabricante: v })} /><TxtF l="Código de producto" v={f.codigo} on={(v) => setF({ ...f, codigo: v })} />
         <NumF l="Kg por saco" v={f.kg_por_saco} on={(v) => setF({ ...f, kg_por_saco: v ?? 25 })} /><NumF l="Mínimo en bodega (kg)" v={f.minimo_kg} on={(v) => setF({ ...f, minimo_kg: v ?? 0 })} /><NumF l="Capacidad del silo (kg, si tiene)" v={f.silo_kg} on={(v) => setF({ ...f, silo_kg: v })} />
         <SelF l="Estado" v={f.activo ? 'si' : 'no'} on={(v) => setF({ ...f, activo: v === 'si' })} opts={[['si', 'Activo'], ['no', 'Inactivo (se oculta)']]} />
       </div>

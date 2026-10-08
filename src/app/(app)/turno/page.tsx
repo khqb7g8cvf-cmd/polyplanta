@@ -68,7 +68,7 @@ export default function Turno() {
 }
 
 function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
-  const { S, L, cfg, turno, maqById, db, run, toast, canProd } = useData();
+  const { S, L, cfg, turno, maqById, db, run, toast, canProd, isDueno, refresh } = useData();
   const { fecha, turno: t } = turno, m = maqById(maqId) as Maquina;
   const rep = S.reportes.find((r) => r.fecha === fecha && r.turno === t);
   const ords = S.ordenes.filter((o) => o.estado !== 'Terminada'), b = m.tipo === 'bolseo';
@@ -88,6 +88,15 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
   const excH = paroH(S.paros, m.id, fecha, t, cfg, exc), heff = Math.max(0, cfg.horasProd - excH);
   const n = lines.length, hs = lines.map((l) => Number(l.horas) || 0), all = n > 1 && hs.every((x) => x > 0), tot = hs.reduce((x, y) => x + y, 0);
 
+  const saved = (rep?.reporte_lineas || []).filter((l) => l.maquina_id === m.id);
+  async function borrarTodo() {
+    if (!confirm(`¿Borrar la producción de ${m.nombre} de este turno (${saved.length} ${saved.length === 1 ? 'línea' : 'líneas'}, ${saved.map((l) => fmt(l.kilos)).join(' + ')} kg)? Queda en la bitácora.`)) return;
+    setBusy(true);
+    const e = await db.from('reporte_lineas').delete().in('id', saved.map((l) => l.id));
+    setBusy(false);
+    if (e.error) return toast(e.error.message, true);
+    toast('Producción borrada'); refresh(); onClose();
+  }
   async function save() {
     if (lines.some((l) => !l.operario.trim() || l.kilos == null || Number.isNaN(Number(l.kilos)))) return toast('Falta el operador o los kilos.', true);
     setBusy(true);
@@ -109,7 +118,7 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
   }
 
   return (
-    <Modal title={'Reporte · ' + m.nombre} onClose={onClose} foot={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn primary" disabled={!canProd || busy} onClick={save}>Guardar reporte</button></>}>
+    <Modal title={'Reporte · ' + m.nombre} onClose={onClose} foot={<>{isDueno && saved.length > 0 && <button className="btn danger" style={{ marginRight: 'auto' }} disabled={busy} onClick={borrarTodo}>Borrar esta producción</button>}<button className="btn" onClick={onClose}>Cancelar</button><button className="btn primary" disabled={!canProd || busy} onClick={save}>Guardar reporte</button></>}>
       <p className="mut" style={{ margin: '0 0 12px' }}>{m.nombre} · {shiftName(fecha, t)}. {ps.length ? <>Paros registrados en este turno: {ps.map((p, i) => <span key={p.id}>{i ? ', ' : ''}<b>{p.causa}</b> {fmt(paroH([p], m.id, fecha, t, cfg), 1)} h{exc.has(p.causa) ? ' (se descuenta de la meta)' : ' (no se descuenta)'}</span>)}.</> : 'Sin paros registrados en este turno.'}</p>
       <datalist id="dl_oper">{S.personas.filter((p) => p.rol === 'operador').map((p) => <option key={p.id} value={p.nombre} />)}</datalist>
       {lines.map((l, i) => {
@@ -141,7 +150,7 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
             </div>
             <div className="row" style={{ marginTop: 10, justifyContent: 'space-between' }}>
               <ChkF l="Justificada por el jefe (no cuenta para amonestación)" v={l.justificada} on={(v) => set(i, { justificada: v })} />
-              {n > 1 && <button className="btn sm danger" onClick={() => setLines((a) => a.filter((_, k) => k !== i))}>Quitar</button>}
+              {n > 1 && (isDueno || !l.id) && <button className="btn sm danger" onClick={() => setLines((a) => a.filter((_, k) => k !== i))}>Quitar</button>}
             </div>
             <div className="calc" style={{ marginTop: 10 }}>
               {exp ? <><span>Debía: <b>{fmt(exp)} kg</b></span><span>({fmt(kgh, 0)} kg/h × {fmt(heff * share, 1)} h)</span>

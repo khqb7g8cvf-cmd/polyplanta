@@ -7,7 +7,7 @@ import { AreaF, Empty, Fld, Modal, Pill, Scroll, SelF } from '@/components/ui';
 import type { Paro } from '@/lib/types';
 
 export default function Paros() {
-  const { S, now, maqById, canProd, run, db, quien } = useData();
+  const { S, now, maqById, canProd, run, db, quien, isDueno } = useData();
   const [open, setOpen] = useState(false);
   const abiertos = S.paros.filter((p) => !p.fin).sort((a, b) => a.inicio.localeCompare(b.inicio));
   const cut = new Date(now - 7 * 864e5).toISOString(), rec = S.paros.filter((p) => p.fin && p.inicio >= cut).sort((a, b) => b.inicio.localeCompare(a.inicio));
@@ -16,7 +16,7 @@ export default function Paros() {
       {L.map((p) => (
         <tr key={p.id}><td>{maqById(p.maquina_id)?.nombre || '?'}</td><td><Pill c={p.causa === 'Mecánico' ? 'bad' : ''}>{p.causa}</Pill></td><td className="mono">{dmy(p.inicio)} {hhmm(p.inicio)}</td>
           <td className="num">{fmtDur((p.fin ? Date.parse(p.fin) : now) - Date.parse(p.inicio))}</td><td>{p.nota || ''}</td><td>{quien(p.created_by)}</td>
-          <td>{!p.fin && canProd && <button className="btn sm" onClick={() => run(db.from('paros').update({ fin: new Date().toISOString() }).eq('id', p.id), 'Máquina reanudada')}>Reanudar</button>}</td></tr>))}
+          <td style={{ whiteSpace: 'nowrap' }}>{!p.fin && canProd && <button className="btn sm" onClick={() => run(db.from('paros').update({ fin: new Date().toISOString() }).eq('id', p.id), 'Máquina reanudada')}>Reanudar</button>}{isDueno && <>{' '}<button className="btn sm danger" onClick={() => confirm(`¿Borrar el paro de ${maqById(p.maquina_id)?.nombre || 'la máquina'} (${p.causa})? Queda en la bitácora.`) && run(db.from('paros').delete().eq('id', p.id), 'Paro borrado')}>Borrar</button></>}</td></tr>))}
     </tbody></table></Scroll>
   );
   return (
