@@ -22,7 +22,7 @@ const LBL: Record<string, string> = {
   fecha: 'Fecha', turno: 'Turno', tipo: 'Tipo', delta_kg: 'Kg (±)', sacos: 'Sacos', lote: 'Lote', proveedor: 'Proveedor', factura: 'Factura', costo_kg: 'Costo/kg', motivo: 'Motivo',
   referencia: 'Referencia', estado: 'Estado', rol: 'Rol', activo: 'Activo', usuario: 'Usuario', nombre: 'Nombre', data: 'Parámetros', descr: 'Descripción', prioridad: 'Prioridad',
   mecanico: 'Mecánico', costo: 'Costo', kg_contados: 'Kg contados', kg_sistema: 'Kg en sistema', diferencia: 'Diferencia', minimo_kg: 'Mínimo (kg)', kg_por_saco: 'Kg por saco',
-  folio: 'Folio', kilos_orden: 'Kilos', fecha_entrega: 'Entrega', evidencia: 'Evidencia', cierre: 'Cierre', nota_cierre: 'Nota de cierre', programada: 'Programada',
+  ubicacion: 'Lugar', silo_kg: 'Capacidad silo (kg)', folio: 'Folio', kilos_orden: 'Kilos', fecha_entrega: 'Entrega', evidencia: 'Evidencia', cierre: 'Cierre', nota_cierre: 'Nota de cierre', programada: 'Programada',
 };
 const OCULTAS = new Set(['id', 'created_by', 'created_at', 'reporte_id', 'creado_por', 'orden', 'updated_at']);
 export const campo = (k: string) => LBL[k] || k.replace(/_/g, ' ');

@@ -8,9 +8,9 @@ import type { Amon, Cfg, LineaCalc, Maquina, Material, Mtto, Movimiento, Orden, 
 
 export interface Store {
   maquinas: Maquina[]; personas: Persona[]; ordenes: Orden[]; reportes: Reporte[]; paros: Paro[]; mtto: Mtto[];
-  amon: Amon[]; materiales: Material[]; movs: Movimiento[]; existencias: Record<string, number>; usuarios: Profile[];
+  amon: Amon[]; materiales: Material[]; movs: Movimiento[]; existencias: Record<string, number>; existUb: Record<string, { silo: number; sacos: number }>; usuarios: Profile[];
 }
-const EMPTY: Store = { maquinas: [], personas: [], ordenes: [], reportes: [], paros: [], mtto: [], amon: [], materiales: [], movs: [], existencias: {}, usuarios: [] };
+const EMPTY: Store = { maquinas: [], personas: [], ordenes: [], reportes: [], paros: [], mtto: [], amon: [], materiales: [], movs: [], existencias: {}, existUb: {}, usuarios: [] };
 
 interface Ctx {
   db: SupabaseClient; S: Store; cfg: Cfg; me: Profile | null; loaded: boolean; live: boolean;
@@ -67,17 +67,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
       db.from('inv_existencias').select('*'),
       uid ? db.from('profiles').select('*').eq('id', uid).maybeSingle() : Promise.resolve({ data: null, error: null }),
       db.from('profiles').select('*').order('created_at'),
+      db.from('inv_existencias_ub').select('*'),
     ]);
     const err = q.find((r) => r.error)?.error;
     if (err) { console.error(err); setLive(false); toast('No se pudo leer la base de datos: ' + err.message, true); setLoaded(true); return; }
     const ex: Record<string, number> = {};
     for (const r of (q[10].data as { material_id: string; kg: number }[]) || []) ex[r.material_id] = Number(r.kg);
+    const ub: Store['existUb'] = {};
+    for (const r of (q[13].data as { material_id: string; ubicacion: 'silo' | 'sacos'; kg: number }[]) || []) (ub[r.material_id] ||= { silo: 0, sacos: 0 })[r.ubicacion] = Number(r.kg);
     const c = { ...DEF_CFG, ...((q[2].data?.data as Partial<Cfg>) || {}) };
     setCfg(c);
     setS({
       maquinas: (q[0].data as Maquina[]) || [], personas: (q[1].data as Persona[]) || [], ordenes: (q[3].data as Orden[]) || [],
       reportes: (q[4].data as Reporte[]) || [], paros: (q[5].data as Paro[]) || [], mtto: (q[6].data as Mtto[]) || [], amon: (q[7].data as Amon[]) || [],
-      materiales: (q[8].data as Material[]) || [], movs: (q[9].data as Movimiento[]) || [], existencias: ex, usuarios: (q[12].data as Profile[]) || [],
+      materiales: (q[8].data as Material[]) || [], movs: (q[9].data as Movimiento[]) || [], existencias: ex, existUb: ub, usuarios: (q[12].data as Profile[]) || [],
     });
     setMe((q[11].data as Profile) || null);
     setLoaded(true); setLive(true);

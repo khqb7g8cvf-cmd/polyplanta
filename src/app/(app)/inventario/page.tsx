@@ -16,7 +16,7 @@ const dd = (s: string) => dmy(s).slice(0, 5);
 export default function Inventario() {
   const { S, now, canProd, isDueno, L } = useData();
   const [modo, setModo] = useState<Modo>(null), [tab, setTab] = useState<Tab>('resumen');
-  const res = useMemo(() => resumenMateriales(S.materiales, S.existencias, S.movs, now), [S.materiales, S.existencias, S.movs, now]);
+  const res = useMemo(() => resumenMateriales(S.materiales, S.existencias, S.movs, now, S.existUb), [S.materiales, S.existencias, S.movs, now, S.existUb]);
   const con = conciliacion(S.movs, L, daysAgo(29), ymd(new Date(now)));
   const valor = sum(res, (r) => r.valor || 0), bajos = res.filter((r) => r.bajo);
   const dias60 = useMemo(() => diasEntre(daysAgo(59), ymd(new Date(now))), [now]);
@@ -35,6 +35,7 @@ export default function Inventario() {
           <Tile l="Salidas · 30 días" v={fmt(con.salidas) + ' kg'} e="de bodega a producción" />
           <Tile l="Diferencia vs extruido" v={con.salidas ? fmt(con.dif) + ' kg' : '—'} e={con.pct == null ? 'sin salidas capturadas' : con.dif >= 0 ? `${fmt(con.pct * 100, 1)}% de lo que salió no aparece extruido (merma o reportes incompletos)` : 'se extruyó más de lo registrado: faltan salidas por capturar'} c={con.pct != null && Math.abs(con.pct) > 0.1 ? 'alert' : ''} />
         </div>
+        {res.filter((r) => r.m.silo_kg).map((r) => <SiloCard key={r.m.id} r={r} onEntrada={() => setModo({ k: 'entrada', mat: r.m.id })} canProd={canProd} />)}
         <div className="chips" style={{ marginTop: 16 }} role="tablist">
           {([['resumen', 'Resumen'], ['kardex', 'Kardex (historial)'], ['consumo', 'Consumo'], ['proveedores', 'Proveedores y precios']] as [Tab, string][]).map(([k, t]) => <button key={k} aria-pressed={tab === k} onClick={() => setTab(k)}>{t}</button>)}
         </div>
@@ -47,7 +48,7 @@ export default function Inventario() {
               {res.map((r: MatResumen) => (
                 <tr key={r.m.id} className="click" onClick={() => setModo({ k: 'ficha', id: r.m.id })}>
                   <td><b>{r.m.nombre}</b><div className="mut">{CAT.find((c) => c[0] === r.m.categoria)?.[1]}</div></td>
-                  <td className="num">{fmt(r.kg)} kg</td><td className="num">{fmt(r.sacos, 1)}</td><td className="num">{fmt(r.m.minimo_kg)}</td>
+                  <td className="num"><b>{fmt(r.kg)} kg</b>{r.m.silo_kg ? <div className="mut">silo {fmt(r.silo)} · sacos {fmt(r.enSacos)}</div> : null}</td><td className="num">{fmt(r.sacos, 1)}</td><td className="num">{fmt(r.m.minimo_kg)}</td>
                   <td><Spark values={existenciaDiaria(S.movs.filter((x) => x.material_id === r.m.id), r.kg, dias60)} color={r.bajo ? 'var(--bad)' : 'var(--s1)'} /></td>
                   <td className="num">{r.consumoDia ? fmt(r.consumoDia, 0) + ' kg' : '—'}</td>
                   <td className="num">{r.dias == null ? '—' : fmt(r.dias, 0) + ' d'}</td>
@@ -77,10 +78,10 @@ const tipoPill = (t: string) => <Pill c={t === 'entrada' ? 'good' : t === 'salid
 
 function Kardex() {
   const { S, isDueno, maqById, ordById, quien, run, db, now } = useData();
-  const [f, setF] = useState({ mat: '', tipo: '', motivo: '', user: '', desde: daysAgo(29), hasta: ymd(new Date(now)), q: '' });
+  const [f, setF] = useState({ mat: '', lugar: '', tipo: '', motivo: '', user: '', desde: daysAgo(29), hasta: ymd(new Date(now)), q: '' });
   const p = (k: Partial<typeof f>) => setF((s) => ({ ...s, ...k }));
   const matBy = (id: string) => S.materiales.find((m) => m.id === id)?.nombre || '?';
-  const rows = useMemo(() => kardex(S.movs, S.existencias), [S.movs, S.existencias]);
+  const rows = useMemo(() => kardex(S.movs, S.existUb), [S.movs, S.existUb]);
   const vis = useMemo(() => {
     const q = f.q.trim().toLowerCase();
     return rows.filter((x) => {
@@ -88,6 +89,7 @@ function Kardex() {
       if (d < f.desde || d > f.hasta) return false;
       if (f.mat && x.material_id !== f.mat) return false;
       if (f.tipo && x.tipo !== f.tipo) return false;
+      if (f.lugar && x.ubicacion !== f.lugar) return false;
       if (f.motivo && (x.motivo || (x.tipo === 'entrada' ? 'compra' : '')) !== f.motivo) return false;
       if (f.user && x.created_by !== f.user) return false;
       if (q && !`${x.proveedor ?? ''} ${x.lote ?? ''} ${x.factura ?? ''} ${x.referencia ?? ''} ${x.nota ?? ''} ${matBy(x.material_id)}`.toLowerCase().includes(q)) return false;
@@ -97,12 +99,13 @@ function Kardex() {
   }, [rows, f, S.materiales]);
   const ent = sum(vis.filter((x) => x.delta_kg > 0), (x) => x.delta_kg), sal = -sum(vis.filter((x) => x.delta_kg < 0), (x) => x.delta_kg);
   const destino = (x: (typeof vis)[number]) => [x.referencia, x.orden_id && ordById(x.orden_id) ? `OT ${ordById(x.orden_id)!.folio}` : '', x.maquina_id && maqById(x.maquina_id)?.nombre].filter(Boolean).join(' · ');
-  const csv = { head: ['Fecha', 'Material', 'Tipo', 'Entrada kg', 'Salida kg', 'Saldo kg', 'Motivo', 'Destino / referencia', 'Proveedor', 'Lote', 'Factura', 'Costo/kg', 'Registró', 'Capturado', 'Nota'], rows: vis.map((x) => [x.fecha.slice(0, 16).replace('T', ' '), matBy(x.material_id), x.tipo, x.delta_kg > 0 ? x.delta_kg : '', x.delta_kg < 0 ? -x.delta_kg : '', Math.round(x.saldo * 10) / 10, motivoTxt(x.motivo, x.tipo), destino(x), x.proveedor ?? '', x.lote ?? '', x.factura ?? '', x.costo_kg ?? '', quien(x.created_by), x.created_at?.slice(0, 16).replace('T', ' ') ?? '', x.nota ?? '']) };
+  const csv = { head: ['Fecha', 'Material', 'Lugar', 'Tipo', 'Entrada kg', 'Salida kg', 'Saldo kg', 'Motivo', 'Destino / referencia', 'Proveedor', 'Lote', 'Factura', 'Costo/kg', 'Registró', 'Capturado', 'Nota'], rows: vis.map((x) => [x.fecha.slice(0, 16).replace('T', ' '), matBy(x.material_id), x.ubicacion === 'silo' ? 'Silo' : 'Sacos', x.tipo, x.delta_kg > 0 ? x.delta_kg : '', x.delta_kg < 0 ? -x.delta_kg : '', Math.round(x.saldo * 10) / 10, motivoTxt(x.motivo, x.tipo), destino(x), x.proveedor ?? '', x.lote ?? '', x.factura ?? '', x.costo_kg ?? '', quien(x.created_by), x.created_at?.slice(0, 16).replace('T', ' ') ?? '', x.nota ?? '']) };
   return (
     <section className="sec">
       <h2>Kardex <small>Cuándo llegó, cuándo salió, para qué y quién lo registró. Con saldo corrido por material.</small></h2>
       <div className="filters" style={{ marginBottom: 12 }}>
         <label className="f"><span>Material</span><select value={f.mat} onChange={(e) => p({ mat: e.target.value })}><option value="">Todos</option>{S.materiales.map((m) => <option key={m.id} value={m.id}>{m.nombre}</option>)}</select></label>
+        <label className="f"><span>Lugar</span><select value={f.lugar} onChange={(e) => p({ lugar: e.target.value })}><option value="">Todos</option><option value="silo">Silo</option><option value="sacos">Sacos / bodega</option></select></label>
         <label className="f"><span>Tipo</span><select value={f.tipo} onChange={(e) => p({ tipo: e.target.value })}><option value="">Todos</option><option value="entrada">Entradas</option><option value="salida">Salidas</option><option value="ajuste">Ajustes</option></select></label>
         <label className="f"><span>Motivo</span><select value={f.motivo} onChange={(e) => p({ motivo: e.target.value })}><option value="">Todos</option><option value="compra">Compra</option>{MOTIVOS.map(([k, t]) => <option key={k} value={k}>{t}</option>)}</select></label>
         <label className="f"><span>Registró</span><select value={f.user} onChange={(e) => p({ user: e.target.value })}><option value="">Todos</option>{S.usuarios.map((u) => <option key={u.id} value={u.id}>{u.usuario || u.nombre}</option>)}</select></label>
@@ -112,10 +115,10 @@ function Kardex() {
         <div className="row" style={{ paddingBottom: 4 }}><button className="btn sm" onClick={() => descargarCSV(`kardex-${f.desde}-a-${f.hasta}`, csv)}>CSV</button><button className="btn sm" onClick={() => window.print()}>Imprimir</button></div>
       </div>
       {vis.length ? (
-        <Scroll><table className="t kardex"><thead><tr><th>Fecha</th><th>Material</th><th>Tipo</th><th className="num">Entrada</th><th className="num">Salida</th><th className="num">Saldo</th><th>Motivo</th><th>Destino / referencia</th><th>Proveedor · lote · factura</th><th>Registró</th><th></th></tr></thead><tbody>
+        <Scroll><table className="t kardex"><thead><tr><th>Fecha</th><th>Material</th><th>Lugar</th><th>Tipo</th><th className="num">Entrada</th><th className="num">Salida</th><th className="num">Saldo</th><th>Motivo</th><th>Destino / referencia</th><th>Proveedor · lote · factura</th><th>Registró</th><th></th></tr></thead><tbody>
           {vis.slice(0, 500).map((x) => (
             <tr key={x.id}>
-              <td className="mono" style={{ whiteSpace: 'nowrap' }}>{dmy(x.fecha)} {hhmm(x.fecha)}</td><td>{matBy(x.material_id)}</td><td>{tipoPill(x.tipo)}</td>
+              <td className="mono" style={{ whiteSpace: 'nowrap' }}>{dmy(x.fecha)} {hhmm(x.fecha)}</td><td>{matBy(x.material_id)}</td><td>{x.ubicacion === 'silo' ? <Pill c="ink">Silo</Pill> : <span className="mut">Sacos</span>}</td><td>{tipoPill(x.tipo)}</td>
               <td className="num" style={{ color: 'var(--good)' }}>{x.delta_kg > 0 ? fmt(x.delta_kg, 1) : ''}</td><td className="num" style={{ color: 'var(--bad)' }}>{x.delta_kg < 0 ? fmt(-x.delta_kg, 1) : ''}</td>
               <td className="num"><b>{fmt(x.saldo, 1)}</b></td>
               <td>{motivoTxt(x.motivo, x.tipo)}</td><td>{destino(x) || <span className="mut">—</span>}{x.nota && <div className="mut">{x.nota}</div>}</td>
@@ -124,7 +127,7 @@ function Kardex() {
               <td>{isDueno && <button className="btn sm danger" onClick={() => confirm('¿Anular este movimiento? Cambia la existencia y queda en la bitácora.') && run(db.from('inv_movimientos').delete().eq('id', x.id), 'Movimiento anulado')}>Anular</button>}</td>
             </tr>))}
         </tbody>
-          <tfoot><tr><td colSpan={3}><b>Totales del filtro ({fmt(vis.length)})</b></td><td className="num" style={{ color: 'var(--good)' }}><b>{fmt(ent, 1)}</b></td><td className="num" style={{ color: 'var(--bad)' }}><b>{fmt(sal, 1)}</b></td><td className="num"><b>{ent - sal >= 0 ? '+' : ''}{fmt(ent - sal, 1)}</b></td><td colSpan={5} className="mut">neto del periodo (kg)</td></tr></tfoot>
+          <tfoot><tr><td colSpan={4}><b>Totales del filtro ({fmt(vis.length)})</b></td><td className="num" style={{ color: 'var(--good)' }}><b>{fmt(ent, 1)}</b></td><td className="num" style={{ color: 'var(--bad)' }}><b>{fmt(sal, 1)}</b></td><td className="num"><b>{ent - sal >= 0 ? '+' : ''}{fmt(ent - sal, 1)}</b></td><td colSpan={5} className="mut">neto del periodo (kg)</td></tr></tfoot>
         </table></Scroll>
       ) : <Empty>No hay movimientos con estos filtros.</Empty>}
       {vis.length > 500 && <p className="mut">Mostrando 500 de {fmt(vis.length)}. Usa los filtros o el CSV.</p>}
@@ -219,11 +222,11 @@ function Ficha({ id, onClose }: { id: string; onClose: () => void }) {
   const ex = S.existencias[id] ?? 0;
   const hist = existenciaDiaria(movs, ex, dias);
   const cons = dias.map((d) => sum(movs.filter((x) => x.tipo === 'salida' && x.fecha.slice(0, 10) === d), (x) => -x.delta_kg));
-  const r = resumenMateriales([m], S.existencias, S.movs, now)[0];
+  const r = resumenMateriales([m], S.existencias, S.movs, now, S.existUb)[0];
   return (
     <Modal title={m.nombre} onClose={onClose} foot={<button className="btn" onClick={onClose}>Cerrar</button>}>
       <div className="tiles" style={{ marginBottom: 14 }}>
-        <Tile l="Existencia" v={fmt(ex) + ' kg'} e={`${fmt(r.sacos, 1)} sacos de ${m.kg_por_saco} kg`} c={r.bajo ? 'alert' : ''} /><Tile l="Cobertura" v={r.dias == null ? '—' : fmt(r.dias, 0) + ' d'} e={`mínimo ${fmt(m.minimo_kg)} kg`} /><Tile l="Consumo/día" v={fmt(r.consumoDia, 0) + ' kg'} e="últimos 30 días" />
+        <Tile l="Existencia" v={fmt(ex) + ' kg'} e={m.silo_kg ? `silo ${fmt(r.silo)} · sacos ${fmt(r.enSacos)} kg` : `${fmt(r.sacos, 1)} sacos de ${m.kg_por_saco} kg`} c={r.bajo ? 'alert' : ''} /><Tile l="Cobertura" v={r.dias == null ? '—' : fmt(r.dias, 0) + ' d'} e={`mínimo ${fmt(m.minimo_kg)} kg`} /><Tile l="Consumo/día" v={fmt(r.consumoDia, 0) + ' kg'} e="últimos 30 días" />
       </div>
       <div style={{ display: 'grid', gap: 12 }}>
         <ChartCard title="Existencia (60 días)" sub="Línea punteada no aplica; revisa contra tu mínimo" table={{ head: ['Día', 'Kg'], rows: dias.map((d, i) => [dmy(d), Math.round(hist[i])]) }}>
@@ -245,20 +248,23 @@ function Ficha({ id, onClose }: { id: string; onClose: () => void }) {
 
 function Mov({ tipo, mat, onClose }: { tipo: 'entrada' | 'salida'; mat?: string; onClose: () => void }) {
   const { S, maqs, db, run, toast, me } = useData();
-  const [f, setF] = useState({ mat: mat || '', sacos: null as number | null, kg: null as number | null, fecha: localDT(new Date()), lote: '', prov: '', fact: '', costo: null as number | null, maq: '', ot: '', motivo: tipo === 'salida' ? 'produccion' : '', ref: '', nota: '' });
+  const [f, setF] = useState({ mat: mat || '', ub: '' as '' | 'silo' | 'sacos', sacos: null as number | null, kg: null as number | null, fecha: localDT(new Date()), lote: '', prov: '', fact: '', costo: null as number | null, maq: '', ot: '', motivo: tipo === 'salida' ? 'produccion' : '', ref: '', nota: '' });
   const p = (k: Partial<typeof f>) => setF((s) => ({ ...s, ...k }));
   const m = S.materiales.find((x) => x.id === f.mat);
-  const ex = m ? S.existencias[m.id] ?? 0 : 0;
+  const ub: 'silo' | 'sacos' = m?.silo_kg ? (f.ub || 'silo') : 'sacos';
+  const ex = m ? S.existUb[m.id]?.[ub] ?? 0 : 0;
+  const kgNow = f.kg ?? (f.sacos && m ? f.sacos * m.kg_por_saco : null);
   async function save() {
     if (!m) return toast('Elige el material.', true);
-    const kg = f.kg ?? (f.sacos ? f.sacos * m.kg_por_saco : null);
+    const kg = kgNow;
     if (!kg || kg <= 0) return toast('Captura los kilos o los sacos.', true);
     if (tipo === 'salida' && !f.motivo) return toast('Indica para qué se saca el material.', true);
     if (f.motivo === 'otro' && !f.nota.trim()) return toast('Si el motivo es "Otro", explícalo en la nota.', true);
     if (tipo === 'salida' && ['venta', 'traspaso', 'devolucion', 'muestra'].includes(f.motivo) && !f.ref.trim()) return toast('Indica a quién / para qué cliente se entrega (referencia).', true);
-    if (tipo === 'salida' && kg > ex && !confirm(`Solo hay ${fmt(ex)} kg en el sistema y estás sacando ${fmt(kg)} kg. ¿Registrar de todos modos? (la existencia quedaría negativa; haz un conteo físico para corregir)`)) return;
+    if (tipo === 'entrada' && ub === 'silo' && m.silo_kg && ex + kg > m.silo_kg && !confirm(`El silo tiene ${fmt(ex)} kg de ${fmt(m.silo_kg)} kg. Con ${fmt(kg)} kg más se pasa ${fmt(ex + kg - m.silo_kg)} kg de su capacidad. ¿Registrar de todos modos? (probablemente el sistema trae de más: haz un conteo del silo)`)) return;
+    if (tipo === 'salida' && kg > ex && !confirm(`Solo hay ${fmt(ex)} kg ${ub === 'silo' ? 'en el silo' : 'en sacos'} según el sistema y estás sacando ${fmt(kg)} kg. ¿Registrar de todos modos? (la existencia quedaría negativa; haz un conteo físico para corregir)`)) return;
     const row = {
-      material_id: m.id, tipo, delta_kg: tipo === 'entrada' ? kg : -kg, sacos: f.sacos ?? (m.kg_por_saco ? kg / m.kg_por_saco : null), fecha: new Date(f.fecha).toISOString(),
+      material_id: m.id, tipo, ubicacion: ub, delta_kg: tipo === 'entrada' ? kg : -kg, sacos: ub === 'sacos' ? (f.sacos ?? (m.kg_por_saco ? kg / m.kg_por_saco : null)) : null, fecha: new Date(f.fecha).toISOString(),
       lote: f.lote.trim() || null, proveedor: f.prov.trim() || null, factura: f.fact.trim() || null, costo_kg: tipo === 'entrada' ? f.costo : null,
       maquina_id: tipo === 'salida' ? f.maq || null : null, orden_id: tipo === 'salida' ? f.ot || null : null, motivo: f.motivo || null, referencia: f.ref.trim() || null, nota: f.nota.trim() || null,
     };
@@ -267,11 +273,14 @@ function Mov({ tipo, mat, onClose }: { tipo: 'entrada' | 'salida'; mat?: string;
   return (
     <Modal title={tipo === 'entrada' ? 'Entrada de material' : 'Salida de bodega'} onClose={onClose} foot={<><span className="mut" style={{ marginRight: 'auto', alignSelf: 'center' }}>Se firma como <b>{me?.usuario || me?.nombre}</b></span><button className="btn" onClick={onClose}>Cancelar</button><button className="btn primary" onClick={save}>Guardar</button></>}>
       <div className="fg">
-        <SelF l="Material" v={f.mat} on={(v) => p({ mat: v })} opts={[['', '— elige —'], ...S.materiales.filter((x) => x.activo).map((x): [string, string] => [x.id, x.nombre])]} />
+        <SelF l="Material" v={f.mat} on={(v) => p({ mat: v, ub: '', sacos: null, kg: null })} opts={[['', '— elige —'], ...S.materiales.filter((x) => x.activo).map((x): [string, string] => [x.id, x.nombre])]} />
         <Fld l="Fecha y hora"><input type="datetime-local" value={f.fecha} onChange={(e) => p({ fecha: e.target.value })} /></Fld>
-        <NumF l={`Sacos${m ? ` (${m.kg_por_saco} kg)` : ''}`} v={f.sacos} on={(v) => p({ sacos: v, kg: v && m ? v * m.kg_por_saco : null })} />
-        <NumF l="Kilos" v={f.kg} on={(v) => p({ kg: v })} style={{ fontWeight: 600 }} />
-        {tipo === 'entrada' && <><TxtF l="Proveedor" v={f.prov} on={(v) => p({ prov: v })} /><TxtF l="Lote" v={f.lote} on={(v) => p({ lote: v })} /><TxtF l="Factura / remisión" v={f.fact} on={(v) => p({ fact: v })} /><NumF l="Costo por kg (MXN)" v={f.costo} on={(v) => p({ costo: v })} />
+        {m?.silo_kg ? <SelF l={tipo === 'entrada' ? 'Llega como' : '¿De dónde sale?'} v={ub} on={(v) => p({ ub: v as 'silo' | 'sacos', sacos: null, kg: null })} opts={tipo === 'entrada' ? [['silo', 'Granel (tolva → silo)'], ['sacos', 'Sacos a bodega']] : [['silo', 'Del silo'], ['sacos', 'De sacos']]} /> : null}
+        {ub === 'sacos'
+          ? <NumF l={`Sacos${m ? ` (${m.kg_por_saco} kg)` : ''}`} v={f.sacos} on={(v) => p({ sacos: v, kg: v && m ? v * m.kg_por_saco : null })} />
+          : <NumF l="Toneladas" v={f.kg == null ? null : Math.round(f.kg) / 1000} on={(v) => p({ kg: v == null ? null : Math.round(v * 1000) })} />}
+        <NumF l="Kilos" v={f.kg} on={(v) => p({ kg: v, sacos: null })} style={{ fontWeight: 600 }} />
+        {tipo === 'entrada' && <><TxtF l="Proveedor" v={f.prov} on={(v) => p({ prov: v })} /><TxtF l={ub === 'silo' ? 'Lote / No. de tolva' : 'Lote'} v={f.lote} on={(v) => p({ lote: v })} /><TxtF l="Factura / remisión" v={f.fact} on={(v) => p({ fact: v })} /><NumF l="Costo por kg (MXN)" v={f.costo} on={(v) => p({ costo: v })} />
           <SelF l="Tipo de entrada" v={f.motivo} on={(v) => p({ motivo: v })} opts={[['', 'Compra'], ['devolucion', 'Devolución a bodega'], ['traspaso', 'Traspaso'], ['otro', 'Otro']]} /></>}
         {tipo === 'salida' && <>
           <SelF l="¿Para qué sale?" v={f.motivo} on={(v) => p({ motivo: v })} opts={MOTIVOS} />
@@ -279,34 +288,58 @@ function Mov({ tipo, mat, onClose }: { tipo: 'entrada' | 'salida'; mat?: string;
           <SelF l="Orden (opcional)" v={f.ot} on={(v) => p({ ot: v })} opts={[['', '—'], ...S.ordenes.filter((o) => o.estado !== 'Entregada').map((o): [string, string] => [o.id, `${o.folio} · ${o.cliente}`])]} />
           <TxtF l="Referencia (cliente, a quién, folio)" v={f.ref} on={(v) => p({ ref: v })} /></>}
       </div>
-      {m && <p className="mut" style={{ marginTop: 10 }}>Existencia actual: <b>{fmt(ex)} kg</b>{f.kg || f.sacos ? ` → quedaría en ${fmt(ex + (tipo === 'entrada' ? 1 : -1) * (f.kg ?? (f.sacos || 0) * m.kg_por_saco))} kg` : ''}.</p>}
+      {m && <p className="mut" style={{ marginTop: 10 }}>{m.silo_kg ? (ub === 'silo' ? 'Silo' : 'Sacos') + ': ' : 'Existencia: '}<b>{fmt(ex)} kg</b>{kgNow ? ` → quedaría en ${fmt(ex + (tipo === 'entrada' ? 1 : -1) * kgNow)} kg` : ''}{ub === 'silo' && m.silo_kg ? ` · libre en el silo: ${fmt(Math.max(0, m.silo_kg - ex - (tipo === 'entrada' ? kgNow || 0 : -(kgNow || 0))))} kg` : ''}.</p>}
       <div style={{ marginTop: 10 }}><AreaF l="Nota" v={f.nota} on={(v) => p({ nota: v })} /></div>
     </Modal>
+  );
+}
+
+function SiloCard({ r, onEntrada, canProd }: { r: MatResumen; onEntrada: () => void; canProd: boolean }) {
+  const cap = r.m.silo_kg as number, pct = Math.max(0, Math.min(1, r.silo / cap)), libre = Math.max(0, cap - r.silo);
+  const col = pct > 0.95 ? 'var(--warn)' : r.silo <= 0 || r.bajo ? 'var(--bad)' : 'var(--s1)';
+  return (
+    <div className="cc" style={{ marginTop: 16, flexDirection: 'row', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+      <svg width="64" height="96" viewBox="0 0 64 96" role="img" aria-label={`Silo ${Math.round(pct * 100)}% lleno`}>
+        <rect x="6" y="6" width="52" height="70" rx="6" fill="var(--surface2)" stroke="var(--line)" strokeWidth="2" />
+        <clipPath id={'sc' + r.m.id}><rect x="6" y="6" width="52" height="70" rx="6" /></clipPath>
+        <rect x="6" y={6 + 70 * (1 - pct)} width="52" height={70 * pct} fill={col} clipPath={`url(#sc${r.m.id})`} opacity=".9" />
+        <path d="M6 76 L26 92 H38 L58 76 Z" fill="var(--line)" />
+      </svg>
+      <div style={{ flex: 1, minWidth: 220 }}>
+        <small className="mut" style={{ textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600 }}>Silo · {r.m.nombre}</small>
+        <div style={{ fontFamily: 'var(--f-disp)', fontSize: 30, fontWeight: 700 }}>{fmt(r.silo / 1000, 1)} t <span className="mut" style={{ fontSize: 15 }}>de {fmt(cap / 1000, 0)} t · {Math.round(pct * 100)}%</span></div>
+        <div className="mut">Libre para descargar: <b>{fmt(libre / 1000, 1)} t</b> (cabe una tolva de {fmt(Math.min(libre, 40000) / 1000, 0)} t){r.consumoDia ? ` · el consumo promedio es ${fmt(r.consumoDia / 1000, 1)} t/día` : ''}</div>
+      </div>
+      <div className="mut" style={{ textAlign: 'right' }}>Sacos en bodega<div style={{ fontFamily: 'var(--f-disp)', fontSize: 22, fontWeight: 700, color: 'var(--fg)' }}>{fmt(r.enSacos)} kg</div>{fmt(r.sacos, 0)} sacos</div>
+      {canProd && <button className="btn primary" onClick={onEntrada}>+ Descargar tolva</button>}
+    </div>
   );
 }
 
 function Conteo({ onClose }: { onClose: () => void }) {
   const { S, db, run, toast } = useData();
   const act = S.materiales.filter((m) => m.activo);
+  const filas = act.flatMap((m) => (m.silo_kg ? [{ m, ub: 'silo' as const }, { m, ub: 'sacos' as const }] : [{ m, ub: 'sacos' as const }]));
   const [kg, setKg] = useState<Record<string, number | null>>({});
   const [nota, setNota] = useState('');
-  const cambios = act.filter((m) => kg[m.id] != null);
+  const key = (m: Material, ub: string) => `${m.id}|${ub}`;
+  const cambios = filas.filter((x) => kg[key(x.m, x.ub)] != null);
   async function save() {
     if (!cambios.length) return toast('Captura al menos un material.', true);
     let ok = true;
-    for (const m of cambios) {
-      const { error } = await db.rpc('registrar_conteo', { p_material: m.id, p_kg: kg[m.id], p_nota: nota.trim() || 'Conteo físico' });
-      if (error) { ok = false; toast(`${m.nombre}: ${error.message}`, true); break; }
+    for (const x of cambios) {
+      const { error } = await db.rpc('registrar_conteo', { p_material: x.m.id, p_kg: kg[key(x.m, x.ub)], p_nota: nota.trim() || 'Conteo físico', p_ubicacion: x.ub });
+      if (error) { ok = false; toast(`${x.m.nombre}: ${error.message}`, true); break; }
     }
     if (ok) { await run(Promise.resolve({ error: null }), `Conteo registrado (${cambios.length})`); onClose(); }
   }
   return (
     <Modal title="Conteo físico" onClose={onClose} foot={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn primary" onClick={save}>Registrar conteo</button></>}>
-      <p className="mut" style={{ margin: '0 0 12px' }}>Pesa o cuenta lo que hay en bodega y captura los kilos reales. La diferencia contra el sistema se guarda como ajuste. Deja en blanco lo que no contaste.</p>
-      <Scroll><table className="t" style={{ minWidth: 480 }}><thead><tr><th>Material</th><th className="num">Sistema</th><th className="num">Contado (kg)</th><th className="num">Diferencia</th></tr></thead><tbody>
-        {act.map((m) => { const sis = S.existencias[m.id] ?? 0, c = kg[m.id]; return (
-          <tr key={m.id}><td>{m.nombre}</td><td className="num">{fmt(sis, 1)}</td>
-            <td className="num"><input type="number" step="any" className="inp" style={{ width: 120, textAlign: 'right' }} value={c ?? ''} onChange={(e) => setKg((s) => ({ ...s, [m.id]: e.target.value === '' ? null : Number(e.target.value) }))} /></td>
+      <p className="mut" style={{ margin: '0 0 12px' }}>Pesa o cuenta lo que hay y captura los kilos reales (el silo, por su medidor o nivel). La diferencia contra el sistema se guarda como ajuste y queda en la bitácora. Deja en blanco lo que no contaste.</p>
+      <Scroll><table className="t" style={{ minWidth: 520 }}><thead><tr><th>Material</th><th>Lugar</th><th className="num">Sistema</th><th className="num">Contado (kg)</th><th className="num">Diferencia</th></tr></thead><tbody>
+        {filas.map(({ m, ub }) => { const sis = S.existUb[m.id]?.[ub] ?? 0, c = kg[key(m, ub)]; return (
+          <tr key={key(m, ub)}><td>{m.nombre}</td><td>{ub === 'silo' ? 'Silo' : 'Sacos'}</td><td className="num">{fmt(sis, 1)}</td>
+            <td className="num"><input type="number" step="any" className="inp" style={{ width: 120, textAlign: 'right' }} value={c ?? ''} onChange={(e) => setKg((s) => ({ ...s, [key(m, ub)]: e.target.value === '' ? null : Number(e.target.value) }))} /></td>
             <td className="num" style={{ color: c != null && c - sis < 0 ? 'var(--bad)' : undefined }}>{c == null ? '' : (c - sis > 0 ? '+' : '') + fmt(c - sis, 1)}</td></tr>); })}
       </tbody></table></Scroll>
       <div style={{ marginTop: 10 }}><AreaF l="Nota (quién contó, motivo)" v={nota} on={setNota} /></div>
@@ -316,7 +349,7 @@ function Conteo({ onClose }: { onClose: () => void }) {
 
 function Mat({ m, onClose }: { m?: Material; onClose: () => void }) {
   const { db, run, toast } = useData();
-  const [f, setF] = useState({ nombre: m?.nombre || '', categoria: m?.categoria || 'resina', kg_por_saco: m?.kg_por_saco ?? 25, minimo_kg: m?.minimo_kg ?? 0, activo: m?.activo ?? true });
+  const [f, setF] = useState({ nombre: m?.nombre || '', categoria: m?.categoria || 'resina', kg_por_saco: m?.kg_por_saco ?? 25, minimo_kg: m?.minimo_kg ?? 0, silo_kg: m?.silo_kg ?? null, activo: m?.activo ?? true });
   async function save() {
     if (!f.nombre.trim()) return toast('Falta el nombre.', true);
     const q = m ? db.from('materiales').update({ ...f, nombre: f.nombre.trim() }).eq('id', m.id) : db.from('materiales').insert({ ...f, nombre: f.nombre.trim() });
@@ -326,7 +359,7 @@ function Mat({ m, onClose }: { m?: Material; onClose: () => void }) {
     <Modal title={m ? m.nombre : 'Nuevo material'} onClose={onClose} foot={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn primary" onClick={save}>Guardar</button></>}>
       <div className="fg">
         <TxtF l="Nombre" v={f.nombre} on={(v) => setF({ ...f, nombre: v })} /><SelF l="Categoría" v={f.categoria} on={(v) => setF({ ...f, categoria: v as Material['categoria'] })} opts={CAT} />
-        <NumF l="Kg por saco" v={f.kg_por_saco} on={(v) => setF({ ...f, kg_por_saco: v ?? 25 })} /><NumF l="Mínimo en bodega (kg)" v={f.minimo_kg} on={(v) => setF({ ...f, minimo_kg: v ?? 0 })} />
+        <NumF l="Kg por saco" v={f.kg_por_saco} on={(v) => setF({ ...f, kg_por_saco: v ?? 25 })} /><NumF l="Mínimo en bodega (kg)" v={f.minimo_kg} on={(v) => setF({ ...f, minimo_kg: v ?? 0 })} /><NumF l="Capacidad del silo (kg, si tiene)" v={f.silo_kg} on={(v) => setF({ ...f, silo_kg: v })} />
         <SelF l="Estado" v={f.activo ? 'si' : 'no'} on={(v) => setF({ ...f, activo: v === 'si' })} opts={[['si', 'Activo'], ['no', 'Inactivo (se oculta)']]} />
       </div>
     </Modal>

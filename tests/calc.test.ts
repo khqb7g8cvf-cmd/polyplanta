@@ -40,8 +40,8 @@ test('ya sancionado no repite', () => {
   assert.equal(opAll(ot(), a, DEF_CFG, now)[0].sug, null);
 });
 
-const mat: Material = { id: 'x', nombre: 'PEBD', categoria: 'resina', kg_por_saco: 25, minimo_kg: 1000, activo: true };
-const mv = (o: Partial<Movimiento>): Movimiento => ({ id: Math.random() + '', material_id: 'x', tipo: 'salida', fecha: '2026-10-05T10:00:00', delta_kg: -300, sacos: null, lote: null, proveedor: null, factura: null, costo_kg: null, maquina_id: null, orden_id: null, nota: null, motivo: null, referencia: null, created_by: null, created_at: '2026-10-05T10:00:00', ...o });
+const mat: Material = { id: 'x', nombre: 'PEBD', categoria: 'resina', kg_por_saco: 25, minimo_kg: 1000, silo_kg: null, activo: true };
+const mv = (o: Partial<Movimiento>): Movimiento => ({ id: Math.random() + '', material_id: 'x', tipo: 'salida', fecha: '2026-10-05T10:00:00', delta_kg: -300, sacos: null, lote: null, proveedor: null, factura: null, costo_kg: null, maquina_id: null, orden_id: null, nota: null, ubicacion: 'sacos', motivo: null, referencia: null, created_by: null, created_at: '2026-10-05T10:00:00', ...o });
 
 test('inventario: cobertura, mínimo, costo', () => {
   const movs = [mv({}), mv({ delta_kg: -300, fecha: '2026-10-06T10:00:00' }), mv({ tipo: 'entrada', delta_kg: 5000, costo_kg: 32, fecha: '2026-10-01T10:00:00' })];
@@ -79,8 +79,10 @@ test('analytics: pareto y día de semana', () => {
 import { kardex, existenciaDiaria, proveedores, salidasPor } from '../src/lib/inv.ts';
 test('kardex: saldo corrido y existencia diaria', () => {
   const movs = [mv({ id: 'c', delta_kg: -200, fecha: '2026-10-05T10:00:00' }), mv({ id: 'b', delta_kg: -300, fecha: '2026-10-04T10:00:00' }), mv({ id: 'a', tipo: 'entrada', delta_kg: 1000, fecha: '2026-10-03T10:00:00' })];
-  const k = kardex(movs, { x: 500 });
+  const k = kardex(movs, { x: { silo: 0, sacos: 500 } });
   assert.deepEqual(k.map((r) => r.saldo), [500, 700, 1000]);
+  const k2 = kardex([mv({ id: 'p', ubicacion: 'silo', delta_kg: -100 }), mv({ id: 'q', ubicacion: 'sacos', delta_kg: -50 })], { x: { silo: 900, sacos: 400 } });
+  assert.deepEqual(k2.map((r) => r.saldo), [900, 400]);
   assert.deepEqual(existenciaDiaria(movs, 500, ['2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05']), [0, 1000, 700, 500]);
 });
 test('proveedores: precio ponderado y salidas por motivo', () => {

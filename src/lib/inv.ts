@@ -1,12 +1,12 @@
 import type { LineaCalc, Material, Movimiento } from './types';
 
 export interface MatResumen {
-  m: Material; kg: number; sacos: number; consumo30: number; consumoDia: number; dias: number | null; bajo: boolean;
+  m: Material; kg: number; silo: number; enSacos: number; sacos: number; consumo30: number; consumoDia: number; dias: number | null; bajo: boolean;
   costoKg: number | null; valor: number | null;
 }
 
 /** Existencia, consumo y cobertura por material. */
-export function resumenMateriales(materiales: Material[], existencias: Record<string, number>, movs: Movimiento[], now = Date.now()): MatResumen[] {
+export function resumenMateriales(materiales: Material[], existencias: Record<string, number>, movs: Movimiento[], now = Date.now(), ub: Record<string, { silo: number; sacos: number }> = {}): MatResumen[] {
   const cut = now - 30 * 864e5;
   return materiales.filter((m) => m.activo).map((m) => {
     const kg = existencias[m.id] ?? 0;
@@ -15,7 +15,8 @@ export function resumenMateriales(materiales: Material[], existencias: Record<st
     const consumoDia = consumo30 / 30;
     const entradas = ms.filter((x) => x.tipo === 'entrada' && x.costo_kg).sort((a, b) => b.fecha.localeCompare(a.fecha));
     const costoKg = entradas[0]?.costo_kg ?? null;
-    return { m, kg, sacos: m.kg_por_saco ? kg / m.kg_por_saco : 0, consumo30, consumoDia, dias: consumoDia > 0 ? kg / consumoDia : null, bajo: kg < m.minimo_kg, costoKg, valor: costoKg ? kg * costoKg : null };
+    const silo = ub[m.id]?.silo ?? 0, enSacos = ub[m.id]?.sacos ?? kg - silo;
+    return { m, kg, silo, enSacos, sacos: m.kg_por_saco ? enSacos / m.kg_por_saco : 0, consumo30, consumoDia, dias: consumoDia > 0 ? kg / consumoDia : null, bajo: kg < m.minimo_kg, costoKg, valor: costoKg ? kg * costoKg : null };
   });
 }
 
@@ -31,12 +32,13 @@ export const MOTIVOS: [string, string][] = [['produccion', 'Producción'], ['mer
 export const motivoTxt = (m: string | null | undefined, tipo?: string) => (m ? MOTIVOS.find((x) => x[0] === m)?.[1] ?? m : tipo === 'entrada' ? 'Compra' : tipo === 'ajuste' ? 'Ajuste de conteo' : '—');
 
 export interface KRow extends Movimiento { saldo: number }
-/** Kardex: cada movimiento con el saldo del material justo después de aplicarlo. `movs` debe venir del más nuevo al más viejo. */
-export function kardex(movs: Movimiento[], existencias: Record<string, number>): KRow[] {
+/** Kardex: cada movimiento con el saldo del material en su ubicación (silo / sacos) justo después de aplicarlo. `movs` debe venir del más nuevo al más viejo. */
+export function kardex(movs: Movimiento[], existUb: Record<string, { silo: number; sacos: number }>): KRow[] {
   const run = new Map<string, number>();
   return movs.map((m) => {
-    const cur = run.get(m.material_id) ?? existencias[m.material_id] ?? 0;
-    run.set(m.material_id, cur - m.delta_kg);
+    const k = `${m.material_id}|${m.ubicacion || 'sacos'}`;
+    const cur = run.get(k) ?? existUb[m.material_id]?.[m.ubicacion || 'sacos'] ?? 0;
+    run.set(k, cur - m.delta_kg);
     return { ...m, saldo: cur };
   });
 }

@@ -16,7 +16,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { live, loaded, me, toastMsg, S, now, toast, isDueno } = useData();
   const [pw, setPw] = useState<string | null>(null);
   const path = usePathname(), r = useRouter();
-  const bajos = resumenMateriales(S.materiales, S.existencias, S.movs, now).filter((x) => x.bajo).length;
+  const bajos = resumenMateriales(S.materiales, S.existencias, S.movs, now, S.existUb).filter((x) => x.bajo).length;
   return (
     <div className="wrap">
       <header className="hdr">
