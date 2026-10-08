@@ -4,7 +4,6 @@ import { useData } from '@/lib/data';
 import { AREAS, SELLOS, compat, kgMillar, kghOrden } from '@/lib/calc';
 import { dmy, fmt, today } from '@/lib/format';
 import { AreaF, Bar, ChkF, DateF, Empty, Modal, NumF, Pill, Scroll, SelF, TxtF, sn } from '@/components/ui';
-import CalcBolseo from '@/components/CalcBolseo';
 import type { Orden, Tipo } from '@/lib/types';
 
 const etapas = (o: Orden): Tipo[] => ['extrusion', ...(o.impresion ? ['impresion' as Tipo] : []), ...(o.sello && o.sello !== 'ninguno' ? ['bolseo' as Tipo] : [])];
@@ -13,14 +12,14 @@ const medida = (o: Orden) => [o.ancho_ext ? fmt(o.ancho_ext, 1) : '', o.bolsa_la
 export default function Ordenes() {
   const { S, L, isDueno } = useData();
   const [filtro, setFiltro] = useState<'activas' | 'terminadas' | 'todas'>('activas');
-  const [edit, setEdit] = useState<Orden | 'nueva' | null>(null), [calc, setCalc] = useState(false);
+  const [edit, setEdit] = useState<Orden | 'nueva' | null>(null);
   const f = { activas: (o: Orden) => o.estado !== 'Terminada', terminadas: (o: Orden) => o.estado === 'Terminada', todas: () => true }[filtro];
   const list = S.ordenes.filter(f).sort((a, b) => (a.fecha_entrega || '9').localeCompare(b.fecha_entrega || '9'));
   const hoy = today();
   const kgEtapa = (oid: string, t: Tipo) => L.filter((x) => x.orden_id === oid && x.tipo === t).reduce((s, x) => s + x.kilos, 0);
   return (
     <section className="sec">
-      <h2>Órdenes de producción <span className="row"><button className="btn" onClick={() => setCalc(true)}>Calculadora de bolseo</button><button className="btn primary" disabled={!isDueno} onClick={() => setEdit('nueva')}>+ Nueva orden</button></span></h2>
+      <h2>Órdenes de producción <button className="btn primary" disabled={!isDueno} onClick={() => setEdit('nueva')}>+ Nueva orden</button></h2>
       <p className="mut" style={{ margin: '0 0 10px' }}>Las órdenes son opcionales: el reporte de turno funciona sin ellas. Úsalas si quieres ver avance por pedido y que la captura se llene sola.</p>
       <div className="chips" style={{ marginBottom: 10 }}>{([['activas', 'Activas'], ['terminadas', 'Terminadas'], ['todas', 'Todas']] as const).map(([k, t]) => <button key={k} aria-pressed={filtro === k} onClick={() => setFiltro(k)}>{t}</button>)}</div>
       {list.length ? (
@@ -35,7 +34,6 @@ export default function Ordenes() {
                 <td><Pill c={o.estado === 'En proceso' ? 'good' : o.estado === 'Terminada' ? '' : o.estado === 'Pausada' ? 'warn' : 'ink'}>{o.estado}</Pill></td></tr>);
           })}</tbody></table></Scroll>
       ) : <Empty>No hay órdenes {filtro === 'activas' ? 'activas' : ''}.</Empty>}
-      {calc && <CalcBolseo onClose={() => setCalc(false)} />}
       {edit && <OrdenForm o={edit === 'nueva' ? null : edit} onClose={() => setEdit(null)} />}
     </section>
   );

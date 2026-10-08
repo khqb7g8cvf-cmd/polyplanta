@@ -1,7 +1,7 @@
 'use client';
 import { useMemo, useState } from 'react';
 import { useData } from '@/lib/data';
-import { AREAS, bolseoCalc, cls, gapTxt, lineKgh, paroH, pctTxt, shiftWin, stepShift, sumL } from '@/lib/calc';
+import { AREAS, cls, gapTxt, lineKgh, paroH, pctTxt, shiftWin, stepShift, sumL } from '@/lib/calc';
 import { fmt, ymd } from '@/lib/format';
 import { Bar, ChkF, DateF, Modal, NumF, Pill, SelF, Tile, TxtF, Fld } from '@/components/ui';
 import { lineMed, shiftName, useMoney } from '@/components/shared';
@@ -113,7 +113,7 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
       <p className="mut" style={{ margin: '0 0 12px' }}>{m.nombre} · {shiftName(fecha, t)}. {ps.length ? <>Paros registrados en este turno: {ps.map((p, i) => <span key={p.id}>{i ? ', ' : ''}<b>{p.causa}</b> {fmt(paroH([p], m.id, fecha, t, cfg), 1)} h{exc.has(p.causa) ? ' (se descuenta de la meta)' : ' (no se descuenta)'}</span>)}.</> : 'Sin paros registrados en este turno.'}</p>
       <datalist id="dl_oper">{S.personas.filter((p) => p.rol === 'operador').map((p) => <option key={p.id} value={p.nombre} />)}</datalist>
       {lines.map((l, i) => {
-        const kgh = lineKgh(l, m), bq = b ? bolseoCalc({ ancho: l.ancho, largo: l.largo, calibre: l.calibre, densidad: l.densidad, golpes: l.golpes || m.golpes, carriles: l.carriles || m.carriles, horas: heff }) : null, share = all ? hs[i] / tot : 1 / n, exp = kgh ? kgh * heff * share : null, pct = exp && l.kilos != null ? l.kilos / exp : null;
+        const kgh = lineKgh(l, m), share = all ? hs[i] / tot : 1 / n, exp = kgh ? kgh * heff * share : null, pct = exp && l.kilos != null ? l.kilos / exp : null;
         const pickOrden = (id: string) => {
           const o = S.ordenes.find((x) => x.id === id);
           set(i, o ? { orden_id: id, cliente: o.cliente, ancho: (b ? o.bolsa_ancho : o.ancho_ext) ?? l.ancho, largo: o.bolsa_largo ?? l.largo, calibre: o.calibre ?? l.calibre, densidad: o.densidad || 'baja' } : { orden_id: null });
@@ -144,7 +144,7 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
               {n > 1 && <button className="btn sm danger" onClick={() => setLines((a) => a.filter((_, k) => k !== i))}>Quitar</button>}
             </div>
             <div className="calc" style={{ marginTop: 10 }}>
-              {exp ? <><span>Debía: <b>{fmt(exp)} kg</b></span><span>({fmt(kgh, 0)} kg/h × {fmt(heff * share, 1)} h{bq ? ` · ${fmt(bq.bolsasMin, 0)} bolsas/min = ${fmt(bq.millaresH * heff * share, 1)} millares` : ''})</span>
+              {exp ? <><span>Debía: <b>{fmt(exp)} kg</b></span><span>({fmt(kgh, 0)} kg/h × {fmt(heff * share, 1)} h)</span>
                 {pct != null && <><span>Reportó: <b>{fmt(l.kilos)} kg</b></span><span className={cls(pct, cfg) === 'bad' ? 't-bad' : ''}>Cumplimiento: <b>{pctTxt(pct)}</b> · {l.kilos >= exp ? '+' : ''}{fmt(l.kilos - exp)} kg</span></>}</>
                 : <span className="mut">Captura golpes, medida y calibre{b ? '' : ' (o kg/h)'} para calcular lo que debía producir.</span>}
             </div>

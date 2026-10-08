@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { useData } from '@/lib/data';
 import { AREAS, CAUSAS } from '@/lib/calc';
 import { Empty, Fld, Modal, NumF, Pill, Scroll, SelF, TxtF, AreaF, ChkF } from '@/components/ui';
-import CalcBolseo from '@/components/CalcBolseo';
 import type { Cfg, Maquina, Persona, Profile, Rol, Tipo } from '@/lib/types';
 
 const specs = (m: Maquina) => {
@@ -18,11 +17,11 @@ const ROLES: [Rol, string][] = [['dueno', 'Dueño'], ['encargado', 'Encargado'],
 
 export default function Maquinas() {
   const { S, maqs, isDueno, canProd, run, db } = useData();
-  const [m, setM] = useState<Maquina | 'nueva' | null>(null), [cfgOpen, setCfgOpen] = useState(false), [per, setPer] = useState(false), [calc, setCalc] = useState(false);
+  const [m, setM] = useState<Maquina | 'nueva' | null>(null), [cfgOpen, setCfgOpen] = useState(false), [per, setPer] = useState(false);
   return (
     <>
       <section className="sec">
-        <h2>Catálogo de máquinas <span className="row"><button className="btn" onClick={() => setCalc(true)}>Calculadora de bolseo</button><button className="btn" onClick={() => setCfgOpen(true)}>Parámetros</button><button className="btn primary" disabled={!isDueno} onClick={() => setM('nueva')}>+ Nueva máquina</button></span></h2>
+        <h2>Catálogo de máquinas <span className="row"><button className="btn" onClick={() => setCfgOpen(true)}>Parámetros</button><button className="btn primary" disabled={!isDueno} onClick={() => setM('nueva')}>+ Nueva máquina</button></span></h2>
         {(['extrusion', 'impresion', 'bolseo', 'acabado'] as Tipo[]).map((t) => maqs(t).length > 0 && (
           <div key={t}><h3 style={{ margin: '12px 0 6px' }}>{AREAS[t]}</h3>
             <Scroll><table className="t"><thead><tr><th>Máquina</th><th>Marca</th><th>Especificaciones</th><th>Estado</th><th>Notas</th></tr></thead><tbody>
@@ -42,7 +41,6 @@ export default function Maquinas() {
         ) : <Empty>Los operarios se agregan solos cuando se captura su nombre en un reporte. Agrega aquí a los mecánicos para poder asignarles trabajos.</Empty>}
       </section>
       {m && <MaqForm m={m === 'nueva' ? null : m} onClose={() => setM(null)} />}
-      {calc && <CalcBolseo onClose={() => setCalc(false)} />}
       {cfgOpen && <CfgForm onClose={() => setCfgOpen(false)} />}
       {per && <PerForm onClose={() => setPer(false)} />}
     </>
