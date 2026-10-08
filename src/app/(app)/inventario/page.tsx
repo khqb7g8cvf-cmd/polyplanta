@@ -6,7 +6,7 @@ import { conciliacion, existenciaDiaria, kardex, MOTIVOS, motivoTxt, proveedores
 import { diasEntre } from '@/lib/analytics';
 import { ChartCard, Columns, HBars, LineChart, Spark, descargarCSV, SERIES } from '@/components/charts';
 import { AreaF, Empty, Fld, Modal, NumF, Pill, Scroll, SelF, Tile, TxtF } from '@/components/ui';
-import type { Material } from '@/lib/types';
+import type { Material, Movimiento } from '@/lib/types';
 
 const CAT: [string, string][] = [['resina', 'Resina'], ['reciclado', 'Reciclado'], ['masterbatch', 'Masterbatch / pigmento'], ['aditivo', 'Aditivo']];
 type Modo = { k: 'entrada' | 'salida' | 'conteo'; mat?: string } | { k: 'material'; m?: Material } | { k: 'ficha'; id: string } | null;
@@ -78,7 +78,7 @@ const tipoPill = (t: string) => <Pill c={t === 'entrada' ? 'good' : t === 'salid
 
 function Kardex() {
   const { S, isDueno, maqById, ordById, quien, run, db, now } = useData();
-  const [ce, setCe] = useState<{ id: string; costo: number | null; nombre: string } | null>(null);
+  const [em, setEm] = useState<Movimiento | null>(null);
   const [f, setF] = useState({ mat: '', lugar: '', tipo: '', motivo: '', user: '', desde: daysAgo(29), hasta: ymd(new Date(now)), q: '' });
   const p = (k: Partial<typeof f>) => setF((s) => ({ ...s, ...k }));
   const matBy = (id: string) => S.materiales.find((m) => m.id === id)?.nombre || '?';
@@ -125,30 +125,51 @@ function Kardex() {
               <td>{motivoTxt(x.motivo, x.tipo)}</td><td>{destino(x) || <span className="mut">—</span>}{x.nota && <div className="mut">{x.nota}</div>}</td>
               <td>{[x.proveedor, x.lote && `lote ${x.lote}`, x.factura && `fact. ${x.factura}`, x.costo_kg && `$${fmt(x.costo_kg, 2)}/kg`].filter(Boolean).join(' · ') || <span className="mut">—</span>}</td>
               <td><b>{quien(x.created_by)}</b><div className="mut">{x.created_at ? `${dmy(x.created_at)} ${hhmm(x.created_at)}` : ''}</div></td>
-              <td style={{ whiteSpace: 'nowrap' }}>{isDueno && x.tipo === 'entrada' && <><button className="btn sm" onClick={() => setCe({ id: x.id, costo: x.costo_kg, nombre: matBy(x.material_id) })}>Costo</button>{' '}</>}{isDueno && <button className="btn sm danger" onClick={() => confirm('¿Anular este movimiento? Cambia la existencia y queda en la bitácora.') && run(db.from('inv_movimientos').delete().eq('id', x.id), 'Movimiento anulado')}>Anular</button>}</td>
+              <td style={{ whiteSpace: 'nowrap' }}>{isDueno && <><button className="btn sm" onClick={() => setEm(x)}>Editar</button>{' '}</>}{isDueno && <button className="btn sm danger" onClick={() => confirm('¿Anular este movimiento? Cambia la existencia y queda en la bitácora.') && run(db.from('inv_movimientos').delete().eq('id', x.id), 'Movimiento anulado')}>Anular</button>}</td>
             </tr>))}
         </tbody>
           <tfoot><tr><td colSpan={4}><b>Totales del filtro ({fmt(vis.length)})</b></td><td className="num" style={{ color: 'var(--good)' }}><b>{fmt(ent, 1)}</b></td><td className="num" style={{ color: 'var(--bad)' }}><b>{fmt(sal, 1)}</b></td><td className="num"><b>{ent - sal >= 0 ? '+' : ''}{fmt(ent - sal, 1)}</b></td><td colSpan={5} className="mut">neto del periodo (kg)</td></tr></tfoot>
         </table></Scroll>
       ) : <Empty>No hay movimientos con estos filtros.</Empty>}
-      {ce && <CostoModal c={ce} onClose={() => setCe(null)} />}
+      {em && <EditMov x={em} onClose={() => setEm(null)} />}
       {vis.length > 500 && <p className="mut">Mostrando 500 de {fmt(vis.length)}. Usa los filtros o el CSV.</p>}
     </section>
   );
 }
 
-function CostoModal({ c, onClose }: { c: { id: string; costo: number | null; nombre: string }; onClose: () => void }) {
-  const { db, toast, refresh } = useData();
-  const [v, setV] = useState<number | null>(c.costo);
+function EditMov({ x, onClose }: { x: Movimiento; onClose: () => void }) {
+  const { S, db, toast, refresh } = useData();
+  const m = S.materiales.find((k) => k.id === x.material_id);
+  const [f, setF] = useState({ fecha: localDT(new Date(x.fecha)), kg: x.tipo === 'ajuste' ? x.delta_kg : Math.abs(x.delta_kg), ub: x.ubicacion, lote: x.lote || '', prov: x.proveedor || '', fact: x.factura || '', costo: x.costo_kg, motivo: x.motivo || '', ref: x.referencia || '', nota: x.nota || '' });
+  const p = (k: Partial<typeof f>) => setF((s) => ({ ...s, ...k }));
   async function save() {
-    const { error } = v == null ? await db.from('inv_costos').delete().eq('id', c.id) : await db.from('inv_costos').upsert({ id: c.id, costo_kg: v });
+    if (!f.kg || Number.isNaN(Number(f.kg))) return toast('Captura los kilos.', true);
+    if (x.tipo !== 'ajuste' && f.kg < 0) return toast('Los kilos van en positivo; el sistema ya sabe si es entrada o salida.', true);
+    const delta = x.tipo === 'entrada' ? Math.abs(f.kg) : x.tipo === 'salida' ? -Math.abs(f.kg) : f.kg;
+    const ub = m?.silo_kg ? f.ub : 'sacos';
+    const { error } = await db.from('inv_movimientos').update({
+      fecha: new Date(f.fecha).toISOString(), delta_kg: delta, ubicacion: ub, sacos: ub === 'sacos' && m?.kg_por_saco ? Math.abs(delta) / m.kg_por_saco : null,
+      lote: f.lote.trim() || null, proveedor: f.prov.trim() || null, factura: f.fact.trim() || null,
+      motivo: x.tipo === 'salida' ? f.motivo || null : x.motivo, referencia: x.tipo === 'salida' ? f.ref.trim() || null : x.referencia, nota: f.nota.trim() || null,
+    }).eq('id', x.id);
     if (error) return toast(error.message, true);
-    toast('Costo guardado'); refresh(); onClose();
+    if (x.tipo === 'entrada') {
+      const r2 = f.costo == null ? await db.from('inv_costos').delete().eq('id', x.id) : await db.from('inv_costos').upsert({ id: x.id, costo_kg: f.costo });
+      if (r2.error) return toast('Se guardó el movimiento, pero no el costo: ' + r2.error.message, true);
+    }
+    toast('Movimiento actualizado'); refresh(); onClose();
   }
   return (
-    <Modal title={`Costo · ${c.nombre}`} onClose={onClose} foot={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn primary" onClick={save}>Guardar</button></>}>
-      <NumF l="Costo por kg (MXN)" v={v} on={setV} />
-      <p className="mut" style={{ marginTop: 8 }}>Déjalo vacío para quitar el costo. El cambio queda en la bitácora.</p>
+    <Modal title={`Editar ${x.tipo} · ${m?.nombre ?? ''}`} onClose={onClose} foot={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn primary" onClick={save}>Guardar</button></>}>
+      <div className="fg">
+        <Fld l="Fecha y hora"><input type="datetime-local" value={f.fecha} onChange={(e) => p({ fecha: e.target.value })} /></Fld>
+        <NumF l={x.tipo === 'ajuste' ? 'Diferencia (kg, + o −)' : 'Kilos'} v={f.kg} on={(v) => p({ kg: v as number })} />
+        {m?.silo_kg ? <SelF l="Lugar" v={f.ub} on={(v) => p({ ub: v as 'silo' | 'sacos' })} opts={[['silo', 'Silo'], ['sacos', 'Sacos / bodega']]} /> : null}
+        {x.tipo === 'entrada' && <><TxtF l="Proveedor" v={f.prov} on={(v) => p({ prov: v })} /><TxtF l="Lote / No. de tolva" v={f.lote} on={(v) => p({ lote: v })} /><TxtF l="Factura / remisión" v={f.fact} on={(v) => p({ fact: v })} /><NumF l="Costo por kg (MXN)" v={f.costo} on={(v) => p({ costo: v })} /></>}
+        {x.tipo === 'salida' && <><SelF l="Motivo" v={f.motivo} on={(v) => p({ motivo: v })} opts={MOTIVOS.map(([k, t]): [string, string] => [k, t])} /><TxtF l="Destino / referencia" v={f.ref} on={(v) => p({ ref: v })} /></>}
+        <TxtF l="Nota" v={f.nota} on={(v) => p({ nota: v })} />
+      </div>
+      <p className="mut" style={{ marginTop: 8 }}>El cambio queda en la bitácora con el valor anterior y el nuevo. Si cambias los kilos o el lugar, el saldo del kardex se recalcula.</p>
     </Modal>
   );
 }
