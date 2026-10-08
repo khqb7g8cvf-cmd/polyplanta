@@ -1,3 +1,4 @@
+// Solo resinas (virgen y reciclada) y aditivos/deslizantes; los masterbatch/pigmentos no van en el mensaje.
 // Resumen diario de inventario por WhatsApp (API oficial de Meta, plantilla aprobada).
 // Se dispara con pg_cron a las 9:00 CDMX con el cierre del día anterior. Nunca incluye costos.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
@@ -20,7 +21,7 @@ Deno.serve(async (req) => {
   const hace30 = new Date(Date.now() - 30 * 864e5).toISOString();
 
   const [mats, ub, movsAyer, mov30] = await Promise.all([
-    sb.from('materiales').select('id,nombre,minimo_kg,silo_kg,activo').eq('activo', true).order('nombre'),
+    sb.from('materiales').select('id,nombre,categoria,minimo_kg,silo_kg,activo').eq('activo', true).in('categoria', ['resina', 'reciclado', 'aditivo']).order('nombre'),
     sb.from('inv_existencias_ub').select('material_id,ubicacion,kg'),
     sb.from('inv_movimientos').select('material_id,tipo,delta_kg,ubicacion').gte('fecha', desde).lt('fecha', hasta),
     sb.from('inv_movimientos').select('material_id,delta_kg').eq('tipo', 'salida').gte('fecha', hace30),
@@ -43,7 +44,7 @@ Deno.serve(async (req) => {
   const nombre = (id: string) => mats.data!.find((m) => m.id === id)?.nombre ?? '?';
   const suma = (tipo: 'entrada' | 'salida') => {
     const g = new Map<string, number>();
-    for (const x of movsAyer.data!) if ((tipo === 'entrada' ? x.delta_kg > 0 && x.tipo === 'entrada' : x.tipo === 'salida')) g.set(x.material_id, (g.get(x.material_id) || 0) + Math.abs(Number(x.delta_kg)));
+    for (const x of movsAyer.data!) if (mats.data!.some((m) => m.id === x.material_id) && (tipo === 'entrada' ? x.delta_kg > 0 && x.tipo === 'entrada' : x.tipo === 'salida')) g.set(x.material_id, (g.get(x.material_id) || 0) + Math.abs(Number(x.delta_kg)));
     return [...g].map(([id, kg]) => `${nombre(id)} ${kg >= 2000 ? ton(kg) : fmt(kg) + ' kg'}`).join(', ') || 'ninguna';
   };
   const fechaTxt = new Intl.DateTimeFormat('es-MX', { timeZone: MX, day: 'numeric', month: 'short' }).format(ayerD).replace('.', '');
