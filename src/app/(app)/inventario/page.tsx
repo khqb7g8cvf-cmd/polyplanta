@@ -145,12 +145,13 @@ function EditMov({ x, onClose }: { x: Movimiento; onClose: () => void }) {
   async function save() {
     if (!f.kg || Number.isNaN(Number(f.kg))) return toast('Captura los kilos.', true);
     if (x.tipo !== 'ajuste' && f.kg < 0) return toast('Los kilos van en positivo; el sistema ya sabe si es entrada o salida.', true);
+    if (f.motivo === 'otro' && !f.nota.trim()) return toast('Si el motivo es "Otro", explícalo en la nota.', true);
     const delta = x.tipo === 'entrada' ? Math.abs(f.kg) : x.tipo === 'salida' ? -Math.abs(f.kg) : f.kg;
     const ub = m?.silo_kg ? f.ub : 'sacos';
     const { error } = await db.from('inv_movimientos').update({
       fecha: new Date(f.fecha).toISOString(), delta_kg: delta, ubicacion: ub, sacos: ub === 'sacos' && m?.kg_por_saco ? Math.abs(delta) / m.kg_por_saco : null,
       lote: f.lote.trim() || null, proveedor: f.prov.trim() || null, factura: f.fact.trim() || null,
-      motivo: x.tipo === 'salida' ? f.motivo || null : x.motivo, referencia: x.tipo === 'salida' ? f.ref.trim() || null : x.referencia, nota: f.nota.trim() || null,
+      motivo: x.tipo === 'ajuste' ? x.motivo : f.motivo || null, referencia: x.tipo === 'salida' ? f.ref.trim() || null : x.referencia, nota: f.nota.trim() || null,
     }).eq('id', x.id);
     if (error) return toast(error.message, true);
     if (x.tipo === 'entrada') {
@@ -165,7 +166,7 @@ function EditMov({ x, onClose }: { x: Movimiento; onClose: () => void }) {
         <Fld l="Fecha y hora"><input type="datetime-local" value={f.fecha} onChange={(e) => p({ fecha: e.target.value })} /></Fld>
         <NumF l={x.tipo === 'ajuste' ? 'Diferencia (kg, + o −)' : 'Kilos'} v={f.kg} on={(v) => p({ kg: v as number })} />
         {m?.silo_kg ? <SelF l="Lugar" v={f.ub} on={(v) => p({ ub: v as 'silo' | 'sacos' })} opts={[['silo', 'Silo'], ['sacos', 'Sacos / bodega']]} /> : null}
-        {x.tipo === 'entrada' && <><TxtF l="Proveedor" v={f.prov} on={(v) => p({ prov: v })} /><TxtF l="Lote / No. de tolva" v={f.lote} on={(v) => p({ lote: v })} /><TxtF l="Factura / remisión" v={f.fact} on={(v) => p({ fact: v })} /><NumF l="Costo por kg (MXN)" v={f.costo} on={(v) => p({ costo: v })} /></>}
+        {x.tipo === 'entrada' && <><TxtF l="Proveedor" v={f.prov} on={(v) => p({ prov: v })} /><TxtF l="Lote / No. de tolva" v={f.lote} on={(v) => p({ lote: v })} /><TxtF l="Factura / remisión" v={f.fact} on={(v) => p({ fact: v })} /><NumF l="Costo por kg (MXN)" v={f.costo} on={(v) => p({ costo: v })} /><SelF l="Motivo" v={f.motivo} on={(v) => p({ motivo: v })} opts={[['', 'Compra'], ['devolucion', 'Devolución'], ['traspaso', 'Traspaso'], ['otro', 'Otro (explícalo en la nota)']]} /></>}
         {x.tipo === 'salida' && <><SelF l="Motivo" v={f.motivo} on={(v) => p({ motivo: v })} opts={MOTIVOS.map(([k, t]): [string, string] => [k, t])} /><TxtF l="Destino / referencia" v={f.ref} on={(v) => p({ ref: v })} /></>}
         <TxtF l="Nota" v={f.nota} on={(v) => p({ nota: v })} />
       </div>
