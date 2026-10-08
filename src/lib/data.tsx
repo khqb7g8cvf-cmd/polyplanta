@@ -68,6 +68,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       uid ? db.from('profiles').select('*').eq('id', uid).maybeSingle() : Promise.resolve({ data: null, error: null }),
       db.from('profiles').select('*').order('created_at'),
       db.from('inv_existencias_ub').select('*'),
+      db.from('inv_costos').select('*'),
     ]);
     const err = q.find((r) => r.error)?.error;
     if (err) { console.error(err); setLive(false); toast('No se pudo leer la base de datos: ' + err.message, true); setLoaded(true); return; }
@@ -75,12 +76,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
     for (const r of (q[10].data as { material_id: string; kg: number }[]) || []) ex[r.material_id] = Number(r.kg);
     const ub: Store['existUb'] = {};
     for (const r of (q[13].data as { material_id: string; ubicacion: 'silo' | 'sacos'; kg: number }[]) || []) (ub[r.material_id] ||= { silo: 0, sacos: 0 })[r.ubicacion] = Number(r.kg);
+    const costos = new Map(((q[14].data as { id: string; costo_kg: number }[]) || []).map((r) => [r.id, Number(r.costo_kg)]));
     const c = { ...DEF_CFG, ...((q[2].data?.data as Partial<Cfg>) || {}) };
     setCfg(c);
     setS({
       maquinas: (q[0].data as Maquina[]) || [], personas: (q[1].data as Persona[]) || [], ordenes: (q[3].data as Orden[]) || [],
       reportes: (q[4].data as Reporte[]) || [], paros: (q[5].data as Paro[]) || [], mtto: (q[6].data as Mtto[]) || [], amon: (q[7].data as Amon[]) || [],
-      materiales: (q[8].data as Material[]) || [], movs: (q[9].data as Movimiento[]) || [], existencias: ex, existUb: ub, usuarios: (q[12].data as Profile[]) || [],
+      materiales: (q[8].data as Material[]) || [], movs: ((q[9].data as Movimiento[]) || []).map((m) => ({ ...m, costo_kg: costos.get(m.id) ?? null })), existencias: ex, existUb: ub, usuarios: (q[12].data as Profile[]) || [],
     });
     setMe((q[11].data as Profile) || null);
     setLoaded(true); setLive(true);
@@ -95,7 +97,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void load();
     const ch = db.channel('planta');
-    for (const t of ['maquinas', 'personas', 'config', 'ordenes', 'reportes', 'reporte_lineas', 'paros', 'mtto', 'amonestaciones', 'materiales', 'inv_movimientos', 'profiles'])
+    for (const t of ['maquinas', 'personas', 'config', 'ordenes', 'reportes', 'reporte_lineas', 'paros', 'mtto', 'amonestaciones', 'materiales', 'inv_movimientos', 'inv_costos', 'profiles'])
       ch.on('postgres_changes', { event: '*', schema: 'public', table: t }, refresh);
     ch.subscribe((s) => { if (s === 'CHANNEL_ERROR' || s === 'TIMED_OUT') setLive(false); });
     const iv = setInterval(() => setNow(Date.now()), 30000);

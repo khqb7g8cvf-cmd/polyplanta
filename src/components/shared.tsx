@@ -13,8 +13,8 @@ export const SUGC: Record<string, string> = { Verbal: 'warn', Escrita: 'bad', Ac
 
 /** " · ≈ $X" si el dueño configuró margen por kg. */
 export function useMoney() {
-  const { cfg } = useData();
-  return (kg: number) => (cfg.margenKg && kg > 0 ? ` · ≈ $${fmt(kg * cfg.margenKg)} de margen` : '');
+  const { cfg, isDueno } = useData();
+  return (kg: number) => (isDueno && cfg.margenKg && kg > 0 ? ` · ≈ $${fmt(kg * cfg.margenKg)} de margen` : '');
 }
 
 export function LinesTable({ arr }: { arr: LineaCalc[] }) {

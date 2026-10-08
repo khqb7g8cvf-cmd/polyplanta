@@ -31,20 +31,20 @@ export default function Inventario() {
           </span></h2>
         <div className="tiles">
           <Tile l="Bajo mínimo" v={bajos.length} e={bajos.length ? bajos.map((x) => x.m.nombre).join(', ') : 'todo arriba del mínimo'} c={bajos.length ? 'alert' : ''} />
-          <Tile l="Valor en bodega" v={valor ? '$' + fmt(valor) : '—'} e="al último costo por kg capturado" />
+          {isDueno && <Tile l="Valor en bodega" v={valor ? '$' + fmt(valor) : '—'} e="al último costo por kg capturado" />}
           <Tile l="Salidas · 30 días" v={fmt(con.salidas) + ' kg'} e="de bodega a producción" />
           <Tile l="Diferencia vs extruido" v={con.salidas ? fmt(con.dif) + ' kg' : '—'} e={con.pct == null ? 'sin salidas capturadas' : con.dif >= 0 ? `${fmt(con.pct * 100, 1)}% de lo que salió no aparece extruido (merma o reportes incompletos)` : 'se extruyó más de lo registrado: faltan salidas por capturar'} c={con.pct != null && Math.abs(con.pct) > 0.1 ? 'alert' : ''} />
         </div>
         {res.filter((r) => r.m.silo_kg).map((r) => <SiloCard key={r.m.id} r={r} onEntrada={() => setModo({ k: 'entrada', mat: r.m.id })} canProd={canProd} />)}
         <div className="chips" style={{ marginTop: 16 }} role="tablist">
-          {([['resumen', 'Resumen'], ['kardex', 'Kardex (historial)'], ['consumo', 'Consumo'], ['proveedores', 'Proveedores y precios']] as [Tab, string][]).map(([k, t]) => <button key={k} aria-pressed={tab === k} onClick={() => setTab(k)}>{t}</button>)}
+          {([['resumen', 'Resumen'], ['kardex', 'Kardex (historial)'], ['consumo', 'Consumo'], ['proveedores', 'Proveedores y precios']] as [Tab, string][]).filter(([k]) => isDueno || k !== 'proveedores').map(([k, t]) => <button key={k} aria-pressed={tab === k} onClick={() => setTab(k)}>{t}</button>)}
         </div>
       </section>
 
       {tab === 'resumen' && (
         <section className="sec">
           {res.length ? (
-            <Scroll><table className="t"><thead><tr><th>Material</th><th className="num">Existencia</th><th className="num">Sacos</th><th className="num">Mínimo</th><th>60 días</th><th className="num">Consumo/día</th><th className="num">Cobertura</th><th>Estado</th><th className="num">$/kg</th><th></th></tr></thead><tbody>
+            <Scroll><table className="t"><thead><tr><th>Material</th><th className="num">Existencia</th><th className="num">Sacos</th><th className="num">Mínimo</th><th>60 días</th><th className="num">Consumo/día</th><th className="num">Cobertura</th><th>Estado</th>{isDueno && <th className="num">$/kg</th>}<th></th></tr></thead><tbody>
               {res.map((r: MatResumen) => (
                 <tr key={r.m.id} className="click" onClick={() => setModo({ k: 'ficha', id: r.m.id })}>
                   <td><b>{r.m.nombre}</b><div className="mut">{CAT.find((c) => c[0] === r.m.categoria)?.[1]}</div></td>
@@ -53,7 +53,7 @@ export default function Inventario() {
                   <td className="num">{r.consumoDia ? fmt(r.consumoDia, 0) + ' kg' : '—'}</td>
                   <td className="num">{r.dias == null ? '—' : fmt(r.dias, 0) + ' d'}</td>
                   <td>{r.kg <= 0 ? <Pill c="bad">Sin existencia</Pill> : r.bajo ? <Pill c="bad">Bajo mínimo</Pill> : r.dias != null && r.dias < 7 ? <Pill c="warn">Menos de 7 días</Pill> : <Pill c="good">Bien</Pill>}</td>
-                  <td className="num">{r.costoKg ? fmt(r.costoKg, 2) : '—'}</td>
+                  {isDueno && <td className="num">{r.costoKg ? fmt(r.costoKg, 2) : '—'}</td>}
                   <td style={{ whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>{canProd && <><button className="btn sm" onClick={() => setModo({ k: 'entrada', mat: r.m.id })}>Entrada</button>{' '}<button className="btn sm" onClick={() => setModo({ k: 'salida', mat: r.m.id })}>Salida</button>{' '}</>}{isDueno && <button className="btn sm" onClick={() => setModo({ k: 'material', m: r.m })}>Editar</button>}</td>
                 </tr>))}
             </tbody></table></Scroll>
@@ -64,7 +64,7 @@ export default function Inventario() {
       )}
       {tab === 'kardex' && <Kardex />}
       {tab === 'consumo' && <Consumo />}
-      {tab === 'proveedores' && <Proveedores />}
+      {tab === 'proveedores' && isDueno && <Proveedores />}
 
       {modo && (modo.k === 'entrada' || modo.k === 'salida') && <Mov tipo={modo.k} mat={modo.mat} onClose={() => setModo(null)} />}
       {modo?.k === 'conteo' && <Conteo onClose={() => setModo(null)} />}
@@ -247,7 +247,7 @@ function Ficha({ id, onClose }: { id: string; onClose: () => void }) {
 }
 
 function Mov({ tipo, mat, onClose }: { tipo: 'entrada' | 'salida'; mat?: string; onClose: () => void }) {
-  const { S, maqs, db, run, toast, me } = useData();
+  const { S, maqs, db, run, toast, me, isDueno, refresh } = useData();
   const [f, setF] = useState({ mat: mat || '', ub: '' as '' | 'silo' | 'sacos', sacos: null as number | null, kg: null as number | null, fecha: localDT(new Date()), lote: '', prov: '', fact: '', costo: null as number | null, maq: '', ot: '', motivo: tipo === 'salida' ? 'produccion' : '', ref: '', nota: '' });
   const p = (k: Partial<typeof f>) => setF((s) => ({ ...s, ...k }));
   const m = S.materiales.find((x) => x.id === f.mat);
@@ -265,10 +265,16 @@ function Mov({ tipo, mat, onClose }: { tipo: 'entrada' | 'salida'; mat?: string;
     if (tipo === 'salida' && kg > ex && !confirm(`Solo hay ${fmt(ex)} kg ${ub === 'silo' ? 'en el silo' : 'en sacos'} según el sistema y estás sacando ${fmt(kg)} kg. ¿Registrar de todos modos? (la existencia quedaría negativa; haz un conteo físico para corregir)`)) return;
     const row = {
       material_id: m.id, tipo, ubicacion: ub, delta_kg: tipo === 'entrada' ? kg : -kg, sacos: ub === 'sacos' ? (f.sacos ?? (m.kg_por_saco ? kg / m.kg_por_saco : null)) : null, fecha: new Date(f.fecha).toISOString(),
-      lote: f.lote.trim() || null, proveedor: f.prov.trim() || null, factura: f.fact.trim() || null, costo_kg: tipo === 'entrada' ? f.costo : null,
+      lote: f.lote.trim() || null, proveedor: f.prov.trim() || null, factura: f.fact.trim() || null, 
       maquina_id: tipo === 'salida' ? f.maq || null : null, orden_id: tipo === 'salida' ? f.ot || null : null, motivo: f.motivo || null, referencia: f.ref.trim() || null, nota: f.nota.trim() || null,
     };
-    if (await run(db.from('inv_movimientos').insert(row), tipo === 'entrada' ? 'Entrada registrada' : 'Salida registrada')) onClose();
+    const { data: ins, error } = await db.from('inv_movimientos').insert(row).select('id').single();
+    if (error) return toast(error.message, true);
+    if (tipo === 'entrada' && isDueno && f.costo && ins) {
+      const r2 = await db.from('inv_costos').insert({ id: ins.id, costo_kg: f.costo });
+      if (r2.error) toast('Se guardó la entrada, pero no el costo: ' + r2.error.message, true);
+    }
+    toast(tipo === 'entrada' ? 'Entrada registrada' : 'Salida registrada'); refresh(); onClose();
   }
   return (
     <Modal title={tipo === 'entrada' ? 'Entrada de material' : 'Salida de bodega'} onClose={onClose} foot={<><span className="mut" style={{ marginRight: 'auto', alignSelf: 'center' }}>Se firma como <b>{me?.usuario || me?.nombre}</b></span><button className="btn" onClick={onClose}>Cancelar</button><button className="btn primary" onClick={save}>Guardar</button></>}>
@@ -280,7 +286,7 @@ function Mov({ tipo, mat, onClose }: { tipo: 'entrada' | 'salida'; mat?: string;
           ? <NumF l={`Sacos${m ? ` (${m.kg_por_saco} kg)` : ''}`} v={f.sacos} on={(v) => p({ sacos: v, kg: v && m ? v * m.kg_por_saco : null })} />
           : <NumF l="Toneladas" v={f.kg == null ? null : Math.round(f.kg) / 1000} on={(v) => p({ kg: v == null ? null : Math.round(v * 1000) })} />}
         <NumF l="Kilos" v={f.kg} on={(v) => p({ kg: v, sacos: null })} style={{ fontWeight: 600 }} />
-        {tipo === 'entrada' && <><TxtF l="Proveedor" v={f.prov} on={(v) => p({ prov: v })} /><TxtF l={ub === 'silo' ? 'Lote / No. de tolva' : 'Lote'} v={f.lote} on={(v) => p({ lote: v })} /><TxtF l="Factura / remisión" v={f.fact} on={(v) => p({ fact: v })} /><NumF l="Costo por kg (MXN)" v={f.costo} on={(v) => p({ costo: v })} />
+        {tipo === 'entrada' && <><TxtF l="Proveedor" v={f.prov} on={(v) => p({ prov: v })} /><TxtF l={ub === 'silo' ? 'Lote / No. de tolva' : 'Lote'} v={f.lote} on={(v) => p({ lote: v })} /><TxtF l="Factura / remisión" v={f.fact} on={(v) => p({ fact: v })} />{isDueno && <NumF l="Costo por kg (MXN)" v={f.costo} on={(v) => p({ costo: v })} />}
           <SelF l="Tipo de entrada" v={f.motivo} on={(v) => p({ motivo: v })} opts={[['', 'Compra'], ['devolucion', 'Devolución a bodega'], ['traspaso', 'Traspaso'], ['otro', 'Otro']]} /></>}
         {tipo === 'salida' && <>
           <SelF l="¿Para qué sale?" v={f.motivo} on={(v) => p({ motivo: v })} opts={MOTIVOS} />
