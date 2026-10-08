@@ -17,6 +17,16 @@ export function kgMillar(anchoCm: number | null, largoCm: number | null, calibre
   return a && l && c ? a * l * (c / 2) * d : null;
 }
 
+export interface BolseoIn { ancho: number | null; largo: number | null; calibre: number | null; densidad: string | null; golpes: number | null; carriles: number | null; horas: number }
+export interface BolseoOut { kgMillar: number; gBolsa: number; bolsasMin: number; millaresH: number; kgH: number; millaresTurno: number; kgTurno: number }
+/** Producción teórica de bolseo a partir de medida, calibre, golpes y carriles. */
+export function bolseoCalc(i: BolseoIn): BolseoOut | null {
+  const km = kgMillar(i.ancho, i.largo, i.calibre, i.densidad), g = i.golpes || 0, car = i.carriles || 1;
+  if (!km || !g) return null;
+  const bolsasMin = g * car, millaresH = (bolsasMin * 60) / 1000, kgH = millaresH * km;
+  return { kgMillar: km, gBolsa: km, bolsasMin, millaresH, kgH, millaresTurno: millaresH * i.horas, kgTurno: kgH * i.horas };
+}
+
 /** kg/h teóricos de una línea de reporte en su máquina. */
 export function lineKgh(l: Pick<LineaRow, 'ancho' | 'largo' | 'calibre' | 'densidad' | 'golpes' | 'carriles' | 'kgh'>, m?: Maquina): number | null {
   if (!m) return null;

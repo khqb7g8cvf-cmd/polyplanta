@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { kgMillar, buildLineas, buildOT, opAll, DEF_CFG, sumL } from '../src/lib/calc.ts';
+import { kgMillar, bolseoCalc, buildLineas, buildOT, opAll, DEF_CFG, sumL } from '../src/lib/calc.ts';
 import { resumenMateriales, conciliacion } from '../src/lib/inv.ts';
 import type { Maquina, Reporte, Paro, Amon, LineaRow, Material, Movimiento } from '../src/lib/types.ts';
 
@@ -89,4 +89,14 @@ test('proveedores: precio ponderado y salidas por motivo', () => {
   const p = proveedores([mv({ tipo: 'entrada', delta_kg: 1000, costo_kg: 30, proveedor: 'A' }), mv({ tipo: 'entrada', delta_kg: 3000, costo_kg: 34, proveedor: 'A' })]);
   assert.equal(p[0].promedio, 33); assert.equal(p[0].ultimo, 34);
   assert.equal(salidasPor([mv({ motivo: 'merma' }), mv({ motivo: 'merma', delta_kg: -100 })], (m) => m.motivo || 'sin')[0].kg, 400);
+});
+
+test('bolseo: 50x60 cal 400, 80 golpes, 1 carril', () => {
+  const r = bolseoCalc({ ancho: 50, largo: 60, calibre: 400, densidad: 'baja', golpes: 80, carriles: 1, horas: 10 })!;
+  assert.ok(Math.abs(r.kgMillar - 55.2) < 1e-9);
+  assert.equal(r.bolsasMin, 80);
+  assert.ok(Math.abs(r.millaresH - 4.8) < 1e-9);
+  assert.ok(Math.abs(r.kgH - 264.96) < 1e-6);
+  assert.ok(Math.abs(r.kgTurno - 2649.6) < 1e-6);
+  assert.equal(bolseoCalc({ ancho: 50, largo: 60, calibre: 400, densidad: 'baja', golpes: null, carriles: 1, horas: 10 }), null);
 });
