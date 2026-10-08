@@ -247,7 +247,7 @@ function Ficha({ id, onClose }: { id: string; onClose: () => void }) {
 }
 
 function Mov({ tipo, mat, onClose }: { tipo: 'entrada' | 'salida'; mat?: string; onClose: () => void }) {
-  const { S, maqs, db, run, toast, me, isDueno, refresh } = useData();
+  const { S, maqs, db, run, toast, me, refresh } = useData();
   const [f, setF] = useState({ mat: mat || '', ub: '' as '' | 'silo' | 'sacos', sacos: null as number | null, kg: null as number | null, fecha: localDT(new Date()), lote: '', prov: '', fact: '', costo: null as number | null, maq: '', ot: '', motivo: tipo === 'salida' ? 'produccion' : '', ref: '', nota: '' });
   const p = (k: Partial<typeof f>) => setF((s) => ({ ...s, ...k }));
   const m = S.materiales.find((x) => x.id === f.mat);
@@ -270,7 +270,7 @@ function Mov({ tipo, mat, onClose }: { tipo: 'entrada' | 'salida'; mat?: string;
     };
     const { data: ins, error } = await db.from('inv_movimientos').insert(row).select('id').single();
     if (error) return toast(error.message, true);
-    if (tipo === 'entrada' && isDueno && f.costo && ins) {
+    if (tipo === 'entrada' && f.costo && ins) {
       const r2 = await db.from('inv_costos').insert({ id: ins.id, costo_kg: f.costo });
       if (r2.error) toast('Se guardó la entrada, pero no el costo: ' + r2.error.message, true);
     }
@@ -286,7 +286,7 @@ function Mov({ tipo, mat, onClose }: { tipo: 'entrada' | 'salida'; mat?: string;
           ? <NumF l={`Sacos${m ? ` (${m.kg_por_saco} kg)` : ''}`} v={f.sacos} on={(v) => p({ sacos: v, kg: v && m ? v * m.kg_por_saco : null })} />
           : <NumF l="Toneladas" v={f.kg == null ? null : Math.round(f.kg) / 1000} on={(v) => p({ kg: v == null ? null : Math.round(v * 1000) })} />}
         <NumF l="Kilos" v={f.kg} on={(v) => p({ kg: v, sacos: null })} style={{ fontWeight: 600 }} />
-        {tipo === 'entrada' && <><TxtF l="Proveedor" v={f.prov} on={(v) => p({ prov: v })} /><TxtF l={ub === 'silo' ? 'Lote / No. de tolva' : 'Lote'} v={f.lote} on={(v) => p({ lote: v })} /><TxtF l="Factura / remisión" v={f.fact} on={(v) => p({ fact: v })} />{isDueno && <NumF l="Costo por kg (MXN)" v={f.costo} on={(v) => p({ costo: v })} />}
+        {tipo === 'entrada' && <><TxtF l="Proveedor" v={f.prov} on={(v) => p({ prov: v })} /><TxtF l={ub === 'silo' ? 'Lote / No. de tolva' : 'Lote'} v={f.lote} on={(v) => p({ lote: v })} /><TxtF l="Factura / remisión" v={f.fact} on={(v) => p({ fact: v })} /><NumF l="Costo por kg (MXN)" v={f.costo} on={(v) => p({ costo: v })} />
           <SelF l="Tipo de entrada" v={f.motivo} on={(v) => p({ motivo: v })} opts={[['', 'Compra'], ['devolucion', 'Devolución a bodega'], ['traspaso', 'Traspaso'], ['otro', 'Otro']]} /></>}
         {tipo === 'salida' && <>
           <SelF l="¿Para qué sale?" v={f.motivo} on={(v) => p({ motivo: v })} opts={MOTIVOS} />

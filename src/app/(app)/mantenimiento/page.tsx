@@ -74,7 +74,7 @@ function Cerrar({ x, onClose }: { x: Mtto; onClose: () => void }) {
   const { db, run, isDueno } = useData();
   const [costo, setCosto] = useState<number | null>(null), [mec, setMec] = useState(x.mecanico || ''), [nota, setNota] = useState('');
   async function ok() {
-    if (!(await run(db.from('mtto').update({ estado: 'Cerrada', cierre: new Date().toISOString(), nota_cierre: nota.trim(), ...(isDueno ? { costo } : {}), mecanico: mec.trim() || x.mecanico }).eq('id', x.id), 'Trabajo cerrado'))) return;
+    if (!(await run(db.from('mtto').update({ estado: 'Cerrada', cierre: new Date().toISOString(), nota_cierre: nota.trim(), ...(isDueno || costo != null ? { costo } : {}), mecanico: mec.trim() || x.mecanico }).eq('id', x.id), 'Trabajo cerrado'))) return;
     if (x.tipo === 'preventivo' && x.cada_dias) {
       const d = new Date(); d.setDate(d.getDate() + x.cada_dias);
       await run(db.from('mtto').insert({ maquina_id: x.maquina_id, tipo: 'preventivo', prioridad: x.prioridad, cada_dias: x.cada_dias, descr: x.descr, mecanico: x.mecanico, programada: ymd(d) }));
@@ -83,7 +83,7 @@ function Cerrar({ x, onClose }: { x: Mtto; onClose: () => void }) {
   }
   return (
     <Modal title="Cerrar trabajo" onClose={onClose} foot={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn primary" onClick={ok}>Cerrar trabajo</button></>}>
-      <div className="fg">{isDueno && <NumF l="Costo (opcional, MXN)" v={costo} on={setCosto} />}<Fld l="Mecánico"><input list="dl_mec" value={mec} onChange={(e) => setMec(e.target.value)} /></Fld></div>
+      <div className="fg"><NumF l="Costo (opcional, MXN)" v={costo} on={setCosto} /><Fld l="Mecánico"><input list="dl_mec" value={mec} onChange={(e) => setMec(e.target.value)} /></Fld></div>
       <MecList /><div style={{ marginTop: 10 }}><AreaF l="Qué se hizo" v={nota} on={setNota} /></div>
     </Modal>
   );

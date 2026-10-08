@@ -10,3 +10,6 @@ update public.inv_movimientos set costo_kg = null where costo_kg is not null;
 create or replace function public.sin_costo_en_mov() returns trigger language plpgsql set search_path = public as $$ begin new.costo_kg := null; return new; end $$;
 create trigger sin_costo_en_mov before insert or update on public.inv_movimientos for each row execute function public.sin_costo_en_mov();
 revoke execute on function public.sin_costo_en_mov() from public, anon, authenticated;
+-- El encargado puede capturar el costo de sus propias entradas (no puede leerlo ni cambiarlo después).
+create policy insertar_encargado on public.inv_costos for insert to authenticated
+  with check (public.can_edit_prod() and exists (select 1 from public.inv_movimientos m where m.id = inv_costos.id and m.created_by = auth.uid() and m.tipo = 'entrada'));
