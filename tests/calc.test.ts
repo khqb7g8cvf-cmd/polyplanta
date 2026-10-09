@@ -26,13 +26,13 @@ test('paro mecánico de 1.5 h baja lo esperado', () => {
 });
 
 const now = Date.parse('2026-10-07T12:00:00');
-const ot = () => buildOT(buildLineas([rep('r1', '2026-10-06', 1, [linea({})])], [maq({ id: 'b1' })], [], DEF_CFG, now));
+const ot = () => buildOT(buildLineas([rep('r1', '2026-10-06', 1, [linea({ kilos: 350 })])], [maq({ id: 'b1' })], [], DEF_CFG, now));
 
 test('escalera: turno bajo sugiere Verbal', () => {
   assert.equal(opAll(ot(), [], DEF_CFG, now)[0].sug?.tipo, 'Verbal');
 });
 test('justificada no sugiere', () => {
-  const o = buildOT(buildLineas([rep('r1', '2026-10-06', 1, [linea({ justificada: true })])], [maq({ id: 'b1' })], [], DEF_CFG, now));
+  const o = buildOT(buildLineas([rep('r1', '2026-10-06', 1, [linea({ kilos: 350, justificada: true })])], [maq({ id: 'b1' })], [], DEF_CFG, now));
   assert.equal(opAll(o, [], DEF_CFG, now)[0].sug, null);
 });
 test('ya sancionado no repite', () => {
@@ -67,7 +67,7 @@ test('analytics: agg y rangos', () => {
   assert.deepEqual(diasEntre('2026-10-30', '2026-11-02'), ['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02']);
 });
 test('analytics: operadores y turnos bajos', () => {
-  const r = porOperador([lc({}), lc({ reporte_id: 'r2', kilos: 1000, pct: 1 }), lc({ operario: 'Beto', reporte_id: 'r3', kilos: 500, pct: 0.5 })], DEF_CFG, ['2026-10-05']);
+  const r = porOperador([lc({ pct: 0.6, kilos: 600 }), lc({ reporte_id: 'r2', kilos: 1000, pct: 1 }), lc({ operario: 'Beto', reporte_id: 'r3', kilos: 500, pct: 0.5 })], DEF_CFG, ['2026-10-05']);
   assert.equal(r[0].operario, 'Ana'); assert.equal(r.find((x) => x.operario === 'Ana')!.bajos, 1); assert.equal(r.find((x) => x.operario === 'Beto')!.bajos, 1);
 });
 test('analytics: pareto y día de semana', () => {
@@ -134,4 +134,13 @@ test('la última orden ya cumplida (cantidad de la orden) tampoco se evalúa', (
   assert.equal(hecho[0].exp, null);
   const falta = buildLineas([rep('r1', '2026-10-06', 1, [linea({ orden_id: 'o1', kilos: 100, horas: 2 })])], [maq({ id: 'b1' })], [], DEF_CFG, Date.now(), ords);
   assert.ok(falta[0].exp! > 0);
+});
+
+test('zona amarilla (75-85%) no sanciona; 3 amarillos piden presionar', () => {
+  const t = (id: string, d: string) => rep(id, d, 1, [linea({ kilos: 442 })]); // 80%
+  const o = buildOT(buildLineas([t('r1', '2026-10-04'), t('r2', '2026-10-05'), t('r3', '2026-10-06')], [maq({ id: 'b1' })], [], DEF_CFG, now));
+  const r = opAll(o, [], DEF_CFG, now)[0];
+  assert.equal(r.sug, null);
+  assert.equal(r.avisos.length, 3);
+  assert.equal(r.presionar, true);
 });

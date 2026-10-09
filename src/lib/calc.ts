@@ -5,8 +5,8 @@ export const CAUSAS = ['Mecánico', 'Eléctrico', 'Falta de material', 'Cambio d
 export const SELLOS: [string, string][] = [['fondo', 'Fondo'], ['lateral', 'Lateral'], ['camiseta', 'Camiseta'], ['pouch', 'Pouch con zipper'], ['ninguno', 'Sin bolseo (solo rollo)']];
 
 export const DEF_CFG: Cfg = {
-  horasProd: 10, turno1Inicio: 7, umbralBajo: 85, umbralRec: 105, ventanaDias: 30,
-  nEscrita: 2, nActa: 3, nReconoc: 5, margenKg: null, excusadas: ['Mecánico', 'Eléctrico', 'Falta de material'],
+  horasProd: 10, turno1Inicio: 7, umbralBajo: 75, umbralOk: 85, nAviso: 3, umbralRec: 105, ventanaDias: 30,
+  nEscrita: 3, nActa: 5, nReconoc: 5, margenKg: null, excusadas: ['Mecánico', 'Eléctrico', 'Falta de material'],
 };
 
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -119,7 +119,7 @@ export function buildOT(lineas: LineaCalc[]): OpTurno[] {
 }
 
 export type Cls = 'good' | 'warn' | 'bad' | '';
-export const cls = (p: number | null | undefined, cfg: Cfg): Cls => (p == null ? '' : p >= 1 ? 'good' : p * 100 >= cfg.umbralBajo ? 'warn' : 'bad');
+export const cls = (p: number | null | undefined, cfg: Cfg): Cls => (p == null ? '' : p * 100 >= cfg.umbralOk ? 'good' : p * 100 >= cfg.umbralBajo ? 'warn' : 'bad');
 export const pctTxt = (p: number | null | undefined) => (p == null ? '—' : Math.round(p * 100).toLocaleString('es-MX') + '%');
 export const gapTxt = (p: number | null | undefined) =>
   p == null ? '' : p >= 1 ? `${Math.round((p - 1) * 100)}% arriba de la meta` : `${Math.round((1 - p) * 100)}% abajo de la meta`;
@@ -132,6 +132,8 @@ export function sumL(a: LineaCalc[]) {
 export interface OpResumen {
   n: string; ots: OpTurno[]; pct: number | null; bajos: OpTurno[]; buenos: OpTurno[]; sanc: Amon[]; rec: Amon[]; am: Amon[];
   sug: { tipo: 'Verbal' | 'Escrita' | 'Acta' | 'Reconocimiento' } | null; areas: string[];
+  /** Turnos en zona amarilla (entre el umbral bajo y el verde): no son sanción, solo aviso para presionar. */
+  avisos: OpTurno[]; presionar: boolean;
 }
 
 /** Escalera de amonestaciones: cada turno bajo meta sin respuesta sugiere la siguiente sanción. */
@@ -142,6 +144,7 @@ export function opAll(ot: OpTurno[], amon: Amon[], cfg: Cfg, now = Date.now()): 
     const ots = ot.filter((o) => o.operario === n && o.fecha >= cut).sort((a, b) => (b.fecha + b.turno).localeCompare(a.fecha + a.turno));
     const w = ots.filter((o) => o.exp), exp = w.reduce((s, o) => s + o.exp, 0), kgE = w.reduce((s, o) => s + o.kgE, 0);
     const bajos = w.filter((o) => (o.pct as number) * 100 < cfg.umbralBajo && !o.just), buenos = w.filter((o) => (o.pct as number) * 100 >= cfg.umbralRec);
+    const avisos = w.filter((o) => (o.pct as number) * 100 >= cfg.umbralBajo && (o.pct as number) * 100 < cfg.umbralOk && !o.just);
     const am = amon.filter((a) => a.operario === n && a.fecha >= cut);
     const sanc = am.filter((a) => ['Verbal', 'Escrita', 'Acta'].includes(a.tipo)), rec = am.filter((a) => a.tipo === 'Reconocimiento');
     let sug: OpResumen['sug'] = null;
@@ -149,7 +152,7 @@ export function opAll(ot: OpTurno[], amon: Amon[], cfg: Cfg, now = Date.now()): 
       const k = sanc.length + 1;
       sug = { tipo: k >= cfg.nActa ? 'Acta' : k >= cfg.nEscrita ? 'Escrita' : 'Verbal' };
     } else if (n !== 'Sin nombre' && buenos.length >= cfg.nReconoc && !rec.length) sug = { tipo: 'Reconocimiento' };
-    return { n, ots, pct: exp ? kgE / exp : null, bajos, buenos, sanc, rec, am, sug, areas: [...new Set(ots.flatMap((o) => o.lines.map((x) => AREAS[x.tipo || ''] || '')))] };
+    return { n, ots, pct: exp ? kgE / exp : null, bajos, buenos, sanc, rec, am, sug, avisos, presionar: avisos.length >= cfg.nAviso, areas: [...new Set(ots.flatMap((o) => o.lines.map((x) => AREAS[x.tipo || ''] || '')))] };
   }).sort((a, b) => (a.pct ?? 9) - (b.pct ?? 9));
 }
 

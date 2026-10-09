@@ -32,7 +32,7 @@ export default function Operadores() {
   return (
     <section className="sec">
       <h2>Operadores <small>últimos {cfg.ventanaDias} días · la meta se ajusta por paros mecánicos, eléctricos y falta de material</small></h2>
-      <p className="mut" style={{ margin: '0 0 12px', maxWidth: '75ch' }}>Un turno cuenta como bajo cuando queda abajo de {cfg.umbralBajo}% de lo que debía producir. Cada turno bajo sin respuesta genera una sugerencia: verbal, escrita y acta administrativa. {cfg.nReconoc} turnos arriba de {cfg.umbralRec}% sugieren un reconocimiento. Las reglas se cambian en Máquinas ▸ Parámetros.</p>
+      <p className="mut" style={{ margin: '0 0 12px', maxWidth: '75ch' }}>🟢 Desde {cfg.umbralOk}%: todo bien. 🟡 Entre {cfg.umbralBajo}% y {cfg.umbralOk}%: no es sanción; si se repite {cfg.nAviso} veces en {cfg.ventanaDias} días sale "Presionar". 🔴 Abajo de {cfg.umbralBajo}%: amonestación (verbal, escrita desde la {cfg.nEscrita}ª, acta desde la {cfg.nActa}ª). {cfg.nReconoc} turnos arriba de {cfg.umbralRec}% sugieren reconocimiento. Las reglas se cambian en Máquinas ▸ Parámetros.</p>
       {ops.length || soloFaltas.length ? (
         <Scroll>
           <table className="t">
@@ -44,7 +44,7 @@ export default function Operadores() {
                   <td><PctCell p={o.pct} c={cls(o.pct, cfg)} txt={pctTxt(o.pct)} /></td>
                   <td><div className="spk">{o.ots.slice(0, 8).reverse().map((t) => <i key={t.rid} className={cls(t.pct, cfg) || 'none'} style={{ height: `${t.pct == null ? 15 : Math.max(12, (Math.min(1.25, t.pct) / 1.25) * 100)}%` }} title={`${dmy(t.fecha)} T${t.turno}: ${pctTxt(t.pct)}`} />)}</div></td>
                   <td className="num">{o.bajos.length}</td><td className="num">{o.sanc.length}</td><td className="num">{nF(o.n) || <span className="mut">0</span>}</td>
-                  <td>{o.sug ? <Pill c={SUGC[o.sug.tipo]}>Sugerida: {o.sug.tipo}</Pill> : <span className="mut">—</span>}</td>
+                  <td>{o.sug ? <Pill c={SUGC[o.sug.tipo]}>Sugerida: {o.sug.tipo}</Pill> : o.presionar ? <Pill c="warn">Presionar</Pill> : <span className="mut">—</span>}</td>
                 </tr>
               ))}
               {soloFaltas.map((n) => (
@@ -66,7 +66,7 @@ function Detalle({ n, faltas, onClose }: { n: string; faltas: Falta[]; onClose: 
   const { OT, S, cfg, now, maqById, isDueno } = useData();
   const [form, setForm] = useState<string | null>(null);
   const [acta, setActa] = useState<Amon | null>(null);
-  const o = opAll(OT, S.amon, cfg, now).find((x) => x.n === n) || (faltas.length ? { n, ots: [], pct: null, bajos: [], buenos: [], sanc: [], rec: [], am: S.amon.filter((a) => a.operario === n), sug: null, areas: [] } as unknown as ReturnType<typeof opAll>[number] : undefined);
+  const o = opAll(OT, S.amon, cfg, now).find((x) => x.n === n) || (faltas.length ? { n, ots: [], pct: null, bajos: [], buenos: [], sanc: [], rec: [], am: S.amon.filter((a) => a.operario === n), sug: null, avisos: [], presionar: false, areas: [] } as unknown as ReturnType<typeof opAll>[number] : undefined);
   if (!o) return null;
   if (acta) return <ActaView a={acta} onClose={() => setActa(null)} />;
   if (form) return <AmonForm n={n} tipo={form} onClose={() => setForm(null)} onSaved={(a) => { setForm(null); setActa(a); }} />;

@@ -101,6 +101,7 @@ function CfgForm({ onClose }: { onClose: () => void }) {
   async function save() {
     if (!c.horasProd || c.horasProd < 1 || c.horasProd > 12) return toast('Las horas productivas van de 1 a 12.', true);
     if (!c.umbralBajo || c.umbralBajo > 100 || !c.ventanaDias) return toast('Revisa el umbral y la ventana de días.', true);
+    if (c.umbralOk < c.umbralBajo) return toast('El verde debe empezar en un % igual o mayor al de amonestación.', true);
     if (await run(db.from('config').upsert({ id: 1, data: c }), 'Parámetros guardados')) onClose();
   }
   return (
@@ -110,8 +111,8 @@ function CfgForm({ onClose }: { onClose: () => void }) {
         <p className="mut" style={{ margin: '10px 0 6px' }}>Paros que se descuentan de la meta del turno (no es culpa del operador):</p>
         <div className="row">{CAUSAS.map((x) => <ChkF key={x} l={x} v={c.excusadas.includes(x)} on={(on) => p({ excusadas: on ? [...c.excusadas, x] : c.excusadas.filter((y) => y !== x) })} />)}</div></fieldset>
       <fieldset><legend>Reglas de amonestación</legend>
-        <div className="fg"><NumF l="Turno bajo meta si queda abajo de (%)" v={c.umbralBajo} on={(v) => p({ umbralBajo: v ?? 85 })} /><NumF l="Reconocer arriba de (%)" v={c.umbralRec} on={(v) => p({ umbralRec: v ?? 105 })} /><NumF l="Ventana de análisis (días)" v={c.ventanaDias} on={(v) => p({ ventanaDias: v ?? 30 })} />
-          <NumF l="Amonestación escrita desde la sanción No." v={c.nEscrita} on={(v) => p({ nEscrita: v ?? 2 })} /><NumF l="Acta administrativa desde la sanción No." v={c.nActa} on={(v) => p({ nActa: v ?? 3 })} /><NumF l="Turnos buenos para reconocer" v={c.nReconoc} on={(v) => p({ nReconoc: v ?? 5 })} /></div></fieldset>
+        <div className="fg"><NumF l="Amonestación directa si el turno queda abajo de (%)" v={c.umbralBajo} on={(v) => p({ umbralBajo: v ?? 75 })} /><NumF l="Verde (todo bien) desde (%)" v={c.umbralOk} on={(v) => p({ umbralOk: v ?? 85 })} /><NumF l="Turnos amarillos para avisar 'presionar'" v={c.nAviso} on={(v) => p({ nAviso: v ?? 3 })} /><NumF l="Reconocer arriba de (%)" v={c.umbralRec} on={(v) => p({ umbralRec: v ?? 105 })} /><NumF l="Ventana de análisis (días)" v={c.ventanaDias} on={(v) => p({ ventanaDias: v ?? 30 })} />
+          <NumF l="Amonestación escrita desde la sanción No." v={c.nEscrita} on={(v) => p({ nEscrita: v ?? 3 })} /><NumF l="Acta administrativa desde la sanción No." v={c.nActa} on={(v) => p({ nActa: v ?? 5 })} /><NumF l="Turnos buenos para reconocer" v={c.nReconoc} on={(v) => p({ nReconoc: v ?? 5 })} /></div></fieldset>
       {!isDueno && <p className="mut">Solo el dueño puede cambiar los parámetros.</p>}
     </Modal>
   );

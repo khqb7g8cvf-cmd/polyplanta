@@ -31,7 +31,7 @@ export interface Mtto {
 }
 export interface Amon { id: string; operario: string; tipo: 'Verbal' | 'Escrita' | 'Acta' | 'Reconocimiento'; fecha: string; evidencia: string | null; nota: string | null }
 export interface Cfg {
-  horasProd: number; turno1Inicio: number; umbralBajo: number; umbralRec: number; ventanaDias: number;
+  horasProd: number; turno1Inicio: number; umbralBajo: number; umbralOk: number; nAviso: number; umbralRec: number; ventanaDias: number;
   nEscrita: number; nActa: number; nReconoc: number; margenKg: number | null; excusadas: string[];
 }
 export interface Material { id: string; nombre: string; categoria: 'resina' | 'reciclado' | 'masterbatch' | 'aditivo'; kg_por_saco: number; minimo_kg: number; silo_kg: number | null; codigo: string | null; fabricante: string | null; activo: boolean }
