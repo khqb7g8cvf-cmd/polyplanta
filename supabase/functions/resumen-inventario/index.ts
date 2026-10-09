@@ -1,4 +1,4 @@
-// Solo resinas (virgen y reciclada) y aditivos/deslizantes; los masterbatch/pigmentos no van en el mensaje.
+// Solo la categoría resina; ni aditivos/deslizantes, ni reciclado, ni masterbatch/pigmentos van en el mensaje.
 // Resumen diario de inventario por WhatsApp (API oficial de Meta, plantilla aprobada).
 // Se dispara con pg_cron a las 9:00 CDMX con el cierre del día anterior. Nunca incluye costos.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
@@ -21,7 +21,7 @@ Deno.serve(async (req) => {
   const hace30 = new Date(Date.now() - 30 * 864e5).toISOString();
 
   const [mats, ub, movsAyer, mov30] = await Promise.all([
-    sb.from('materiales').select('id,nombre,categoria,minimo_kg,silo_kg,activo').eq('activo', true).in('categoria', ['resina', 'reciclado', 'aditivo']).order('nombre'),
+    sb.from('materiales').select('id,nombre,categoria,minimo_kg,silo_kg,activo').eq('activo', true).eq('categoria', 'resina').order('nombre'),
     sb.from('inv_existencias_ub').select('material_id,ubicacion,kg'),
     sb.from('inv_movimientos').select('material_id,tipo,delta_kg,ubicacion').gte('fecha', desde).lt('fecha', hasta),
     sb.from('inv_movimientos').select('material_id,delta_kg').eq('tipo', 'salida').gte('fecha', hace30),
