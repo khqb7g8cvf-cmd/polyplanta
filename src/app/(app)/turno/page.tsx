@@ -1,7 +1,7 @@
 'use client';
 import { useMemo, useState } from 'react';
 import { useData } from '@/lib/data';
-import { AREAS, cls, gapTxt, evalMaquinaTurno, lineKgh, producidoPorOrden, paroH, pctTxt, shiftWin, stepShift, sumL } from '@/lib/calc';
+import { AREAS, cls, gapTxt, evalMaquinaTurno, kgMillar, lineKgh, producidoPorOrden, paroH, pctTxt, shiftWin, stepShift, sumL } from '@/lib/calc';
 import { fmt, hhmm, ymd } from '@/lib/format';
 import { Bar, ChkF, DateF, Modal, NumF, Pill, SelF, Tile, TxtF, Fld } from '@/components/ui';
 import { lineMed, shiftName, useMoney } from '@/components/shared';
@@ -191,7 +191,7 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
             </div>
             <div className="calc" style={{ marginTop: 10 }}>
               {cerrada ? <span>✅ Última orden cumplida (<b>{fmt(l.kilos)} kg</b>): no se evalúa el resto del turno.</span>
-                : exp && tTeo != null && disp != null ? <><span>Debía tardar: <b>{fmt(tTeo, 1)} h</b></span><span>({fmt(l.kilos)} kg ÷ {fmt(kgh, 0)} kg/h)</span>
+                : exp && tTeo != null && disp != null ? <><span>Debía tardar: <b>{fmt(tTeo, 1)} h</b></span><span>({fmt(l.kilos)} kg ÷ {fmt(kgh, 0)} kg/h{b ? <span className="mut"> = {fmt(l.golpes ?? m.golpes ?? 0)} golpes × {l.carriles ?? m.carriles ?? 1} carril(es) × {fmt(kgMillar(l.ancho, l.largo, l.calibre, l.densidad) ?? 0, 1)} kg/millar{m.kgh ? `, tope ${fmt(m.kgh)} kg/h` : ''}</span> : null})</span>
                   <span>{he_all ? 'Tardó' : 'Disponible'}: <b>{fmt(disp, 1)} h</b>{n > 1 && cfg.minCambio > 0 ? <span className="mut"> (ya con {cfg.minCambio} min por cambio de orden)</span> : null}{Number(l.horas_perdidas) > 0 ? <span className="mut"> (menos {fmt(Number(l.horas_perdidas), 1)} h perdidas)</span> : null}</span>
                   {pct != null && <span className={cls(pct, cfg) === 'bad' ? 't-bad' : ''}>Cumplimiento: <b>{pctTxt(pct)}</b></span>}</>
                 : kgh ? <span className="mut">Captura los kilos para calcular cuánto debía tardar.</span>

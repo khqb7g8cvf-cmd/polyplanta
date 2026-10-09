@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { kgMillar, buildLineas, buildOT, opAll, DEF_CFG, sumL } from '../src/lib/calc.ts';
+import { kgMillar, lineKgh, buildLineas, buildOT, opAll, DEF_CFG, sumL } from '../src/lib/calc.ts';
 import { resumenMateriales, conciliacion } from '../src/lib/inv.ts';
 import type { Maquina, Reporte, Paro, Amon, LineaRow, Material, Movimiento } from '../src/lib/types.ts';
 
@@ -155,4 +155,11 @@ test('horas perdidas se descuentan del tiempo disponible', () => {
   assert.ok(Math.abs(l[0].exp! - 55.2 * 9) < 0.5);
   const m = buildLineas([rep('r1', '2026-10-06', 1, [linea({ horas: 3, horas_perdidas: 0.5 }), linea({ horas: 4 })])], [maq({ id: 'b1' })], [], { ...DEF_CFG, minCambio: 0 }, now);
   assert.ok(Math.abs(m[0].exp! - 55.2 * 2.5) < 0.5 && Math.abs(m[1].exp! - 55.2 * 4) < 0.5);
+});
+
+test('bolseo: m.kgh es un tope real de la máquina', () => {
+  const l = linea({ ancho: 50, largo: 70, calibre: 500, golpes: 40, carriles: 2 });
+  const libre = lineKgh(l, maq({ id: 'b1' }))!, tope = lineKgh(l, maq({ id: 'b1', kgh: 200 }))!;
+  assert.ok(Math.abs(libre - 386.4) < 0.5);
+  assert.equal(tope, 200);
 });

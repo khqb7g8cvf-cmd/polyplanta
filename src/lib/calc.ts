@@ -22,8 +22,8 @@ export function lineKgh(l: Pick<LineaRow, 'ancho' | 'largo' | 'calibre' | 'densi
   if (!m) return null;
   if (m.tipo === 'bolseo') {
     const km = kgMillar(l.ancho, l.largo, l.calibre, l.densidad);
-    const g = l.golpes || m.golpes || 0, car = l.carriles || m.carriles || 1;
-    return g && km ? ((g * 60 * car) / 1000) * km : null;
+    const g = l.golpes || m.golpes || 0, car = l.carriles || m.carriles || 1, t = g && km ? ((g * 60 * car) / 1000) * km : null;
+    return t && m.kgh ? Math.min(t, m.kgh) : t; // m.kgh en bolseo = tope real de la máquina
   }
   return l.kgh || m.kgh || null;
 }
@@ -32,8 +32,8 @@ export function kghOrden(o: Orden, m?: Maquina): number | null {
   if (!m) return null;
   if (m.tipo === 'bolseo') {
     const km = kgMillar(o.ancho_ext || o.bolsa_ancho, o.bolsa_largo, o.calibre, o.densidad);
-    const g = o.golpes || m.golpes || 0, car = o.carriles || m.carriles || 1;
-    return g && km ? ((g * 60 * car) / 1000) * km : null;
+    const g = o.golpes || m.golpes || 0, car = o.carriles || m.carriles || 1, t = g && km ? ((g * 60 * car) / 1000) * km : null;
+    return t && m.kgh ? Math.min(t, m.kgh) : t;
   }
   if (m.tipo === 'extrusion') return o.kgh || m.kgh || null;
   return m.kgh || null;

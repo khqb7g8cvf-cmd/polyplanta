@@ -79,7 +79,7 @@ function MaqForm({ m, onClose }: { m: Maquina | null; onClose: () => void }) {
       <div className="fg">
         <TxtF l="Nombre" v={f.nombre} on={(v) => p({ nombre: v })} /><TxtF l="Marca" v={f.marca} on={(v) => p({ marca: v })} />
         <SelF l="Área" v={f.tipo} on={(v) => p({ tipo: v as Tipo })} opts={Object.entries(AREAS)} disabled={!!m} /><SelF l="Estado" v={f.estado} on={(v) => p({ estado: v })} opts={['Activa', 'En camino', 'Fuera de servicio']} />
-        <NumF l="Ancho máx. (cm)" v={f.ancho_max} on={(v) => p({ ancho_max: v })} /><NumF l="kg/h normal" v={f.kgh} on={(v) => p({ kgh: v })} />
+        <NumF l="Ancho máx. (cm)" v={f.ancho_max} on={(v) => p({ ancho_max: v })} /><NumF l={f.tipo === 'bolseo' ? 'Tope real kg/h (lo máximo que da)' : 'kg/h normal'} v={f.kgh} on={(v) => p({ kgh: v })} />
       </div>
       {f.tipo === 'bolseo' && <fieldset style={{ marginTop: 12 }}><legend>Bolseo</legend>
         <div className="fg"><NumF l="Carriles" v={f.carriles} on={(v) => p({ carriles: v })} /><NumF l="Carriles máx." v={f.carriles_max} on={(v) => p({ carriles_max: v })} /><NumF l="Golpes/min normales" v={f.golpes} on={(v) => p({ golpes: v })} /></div>
