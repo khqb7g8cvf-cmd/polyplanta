@@ -1,6 +1,6 @@
 // Solo la categoría resina; ni aditivos/deslizantes, ni reciclado, ni masterbatch/pigmentos van en el mensaje.
 // Resumen diario de inventario por WhatsApp (API oficial de Meta, plantilla aprobada).
-// Se dispara con pg_cron a las 9:00 CDMX con el cierre del día anterior. Nunca incluye costos.
+// Se dispara con pg_cron a las 7:00 pm CDMX (01:00 UTC) con los movimientos del día en curso. Nunca incluye costos.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
 const MX = 'America/Mexico_City';
@@ -16,8 +16,8 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
   const dry = url.searchParams.get('dry') === '1', solo = url.searchParams.get('solo') === '1'; // solo=1: prueba, solo al primer número de WA_TO
 
-  const hoy = ymd(new Date()), ayerD = new Date(Date.now() - 864e5), ayer = ymd(ayerD);
-  const desde = `${ayer}T00:00:00-06:00`, hasta = `${hoy}T00:00:00-06:00`;
+  const ahora = new Date(), hoy = ymd(ahora), manana = ymd(new Date(Date.now() + 864e5)); // se envía a las 7 pm CDMX: el día de hoy
+  const desde = `${hoy}T00:00:00-06:00`, hasta = `${manana}T00:00:00-06:00`;
   const hace30 = new Date(Date.now() - 30 * 864e5).toISOString();
 
   const [mats, ub, movsAyer, mov30] = await Promise.all([
@@ -47,7 +47,7 @@ Deno.serve(async (req) => {
     for (const x of movsAyer.data!) if (mats.data!.some((m) => m.id === x.material_id) && (tipo === 'entrada' ? x.delta_kg > 0 && x.tipo === 'entrada' : x.tipo === 'salida')) g.set(x.material_id, (g.get(x.material_id) || 0) + Math.abs(Number(x.delta_kg)));
     return [...g].map(([id, kg]) => `${nombre(id)} ${kg >= 2000 ? ton(kg) : fmt(kg) + ' kg'}`).join(', ') || 'ninguna';
   };
-  const fechaTxt = new Intl.DateTimeFormat('es-MX', { timeZone: MX, day: 'numeric', month: 'short' }).format(ayerD).replace('.', '');
+  const fechaTxt = new Intl.DateTimeFormat('es-MX', { timeZone: MX, day: 'numeric', month: 'short' }).format(ahora).replace('.', '');
   // Modo lista (plantilla v2): cada material va en su propia variable/renglón. N = WA_LINEAS (o ?lineas=N para previsualizar). 0 = formato anterior de 5 variables.
   const N = Number(url.searchParams.get('lineas') ?? Deno.env.get('WA_LINEAS') ?? 0) || 0;
   let params: string[];
