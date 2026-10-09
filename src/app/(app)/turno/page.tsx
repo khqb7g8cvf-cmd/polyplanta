@@ -1,7 +1,7 @@
 'use client';
 import { useMemo, useState } from 'react';
 import { useData } from '@/lib/data';
-import { AREAS, cls, gapTxt, horasEfectivas, lineKgh, ordenCerrada, producidoPorOrden, paroH, pctTxt, shiftWin, stepShift, sumL } from '@/lib/calc';
+import { AREAS, cls, gapTxt, evalMaquinaTurno, lineKgh, producidoPorOrden, paroH, pctTxt, shiftWin, stepShift, sumL } from '@/lib/calc';
 import { fmt, hhmm, ymd } from '@/lib/format';
 import { Bar, ChkF, DateF, Modal, NumF, Pill, SelF, Tile, TxtF, Fld } from '@/components/ui';
 import { lineMed, shiftName, useMoney } from '@/components/shared';
@@ -92,10 +92,11 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
   const [a, c] = shiftWin(fecha, t, cfg);
   const ps = S.paros.filter((p) => p.maquina_id === m.id && Date.parse(p.inicio) < +c && (p.fin ? Date.parse(p.fin) : Date.now()) > +a);
   const excH = paroH(S.paros, m.id, fecha, t, cfg, exc);
-  const n = lines.length, hs = lines.map((l) => Number(l.horas) || 0), he = horasEfectivas(hs, excH, cfg.horasProd || 10);
   const prod = producidoPorOrden(S.reportes);
   for (const l of saved0) if (l.orden_id) prod.set(l.orden_id, (prod.get(l.orden_id) || 0) - (Number(l.kilos) || 0));
   for (const l of lines) if (l.orden_id && !l.incidencia) prod.set(l.orden_id, (prod.get(l.orden_id) || 0) + (Number(l.kilos) || 0));
+  const he_all = lines.length > 1 && lines.every((l) => Number(l.horas) > 0);
+  const n = lines.length, hs = lines.map((l) => Number(l.horas) || 0), ev = evalMaquinaTurno(lines, lines.map((l) => lineKgh(l, m)), excH, cfg.horasProd || 10, S.ordenes, prod);
 
   const saved = (rep?.reporte_lineas || []).filter((l) => l.maquina_id === m.id);
   const [pedir, setPedir] = useState(false), nowT = Date.now();
@@ -156,7 +157,7 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
           <p className="mut" style={{ marginTop: 10 }}>Este turno no cuenta en las estadísticas de la máquina ni del operador.</p>
         </fieldset>
       ) : lines.map((l, i) => {
-        const kgh = lineKgh(l, m), hEf = he.ef[i], cerrada = ordenCerrada(i, n, l.orden_id, S.ordenes, prod), exp = kgh && !cerrada ? kgh * hEf : null, pct = exp && l.kilos != null ? l.kilos / exp : null;
+        const kgh = lineKgh(l, m), { tTeo, disp, exp, cerrada } = ev[i], pct = exp && l.kilos != null ? l.kilos / exp : null;
         const pickOrden = (id: string) => {
           const o = S.ordenes.find((x) => x.id === id);
           set(i, o ? { orden_id: id, cliente: o.cliente, ancho: (b ? o.bolsa_ancho : o.ancho_ext) ?? l.ancho, largo: o.bolsa_largo ?? l.largo, calibre: o.calibre ?? l.calibre, densidad: o.densidad || 'baja' } : { orden_id: null });
@@ -187,9 +188,12 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
               {n > 1 && (isDueno || !l.id) && <button className="btn sm danger" onClick={() => setLines((a) => a.filter((_, k) => k !== i))}>Quitar</button>}
             </div>
             <div className="calc" style={{ marginTop: 10 }}>
-              {cerrada ? <span>✅ Orden terminada: no se evalúa contra el tiempo. Reportó <b>{fmt(l.kilos)} kg</b></span> : exp ? <><span>Debía: <b>{fmt(exp)} kg</b></span><span>({fmt(kgh, 0)} kg/h × {fmt(hEf, 1)} h{he.all ? ' trabajadas' : ''})</span>
-                {pct != null && <><span>Reportó: <b>{fmt(l.kilos)} kg</b></span><span className={cls(pct, cfg) === 'bad' ? 't-bad' : ''}>Cumplimiento: <b>{pctTxt(pct)}</b> · {l.kilos >= exp ? '+' : ''}{fmt(l.kilos - exp)} kg</span></>}</>
-                : <span className="mut">Captura golpes, medida y calibre{b ? '' : ' (o kg/h)'} para calcular lo que debía producir.</span>}
+              {cerrada ? <span>✅ Última orden cumplida (<b>{fmt(l.kilos)} kg</b>): no se evalúa el resto del turno.</span>
+                : exp && tTeo != null && disp != null ? <><span>Debía tardar: <b>{fmt(tTeo, 1)} h</b></span><span>({fmt(l.kilos)} kg ÷ {fmt(kgh, 0)} kg/h)</span>
+                  <span>{he_all ? 'Tardó' : 'Disponible'}: <b>{fmt(disp, 1)} h</b></span>
+                  {pct != null && <span className={cls(pct, cfg) === 'bad' ? 't-bad' : ''}>Cumplimiento: <b>{pctTxt(pct)}</b></span>}</>
+                : kgh ? <span className="mut">Captura los kilos para calcular cuánto debía tardar.</span>
+                : <span className="mut">Captura golpes, medida y calibre{b ? '' : ' (o kg/h)'} para calcular el tiempo.</span>}
             </div>
           </fieldset>
         );

@@ -110,14 +110,19 @@ test('incidencia (faltó operador / máquina no trabajó) no entra a la estadís
   assert.equal(buildOT(l).length, 0);
 });
 
-test('varias órdenes: solo se evalúa la última, con sus horas; las intermedias están terminadas', () => {
-  const l = buildLineas([rep('r1', '2026-10-06', 1, [linea({ horas: 3 }), linea({ horas: 4 })])], [maq({ id: 'b1' })], [], DEF_CFG);
-  assert.equal(l[0].exp, null);
-  assert.equal(l[0].cerrada, true);
-  assert.ok(Math.abs(l[1].exp! - 55.2 * 4) < 0.5);
+test('varias órdenes con horas: cada una se compara contra sus horas reales', () => {
+  const l = buildLineas([rep('r1', '2026-10-06', 1, [linea({ horas: 3, kilos: 165.6 }), linea({ horas: 4, kilos: 165.6 })])], [maq({ id: 'b1' })], [], DEF_CFG);
+  assert.ok(Math.abs(l[0].exp! - 55.2 * 3) < 0.5 && Math.abs(l[0].pct! - 1) < 0.01);
+  assert.ok(Math.abs(l[1].exp! - 55.2 * 4) < 0.5 && Math.abs(l[1].pct! - 0.75) < 0.01);
 });
 
-test('varias órdenes: el paro justificado se descuenta en proporción a las horas', () => {
+test('varias órdenes sin horas: se suman los tiempos teóricos contra las 10 h del turno', () => {
+  const l = buildLineas([rep('r1', '2026-10-06', 1, [linea({ kilos: 276 }), linea({ kilos: 138 })])], [maq({ id: 'b1' })], [], DEF_CFG);
+  assert.ok(Math.abs(l[0].exp! + l[1].exp! - 55.2 * 10) < 0.5);
+  assert.ok(Math.abs(l[0].pct! - 0.75) < 0.01 && Math.abs(l[1].pct! - 0.75) < 0.01);
+});
+
+test('varias órdenes con horas: el paro justificado se descuenta en proporción a las horas', () => {
   const paros: Paro[] = [{ id: 'p', maquina_id: 'b1', causa: 'Mecánico', inicio: new Date(2026, 9, 6, 9, 0).toISOString(), fin: new Date(2026, 9, 6, 10, 0).toISOString(), orden_id: null, nota: null }];
   const l = buildLineas([rep('r1', '2026-10-06', 1, [linea({ horas: 3 }), linea({ horas: 4 })])], [maq({ id: 'b1' })], paros, DEF_CFG);
   assert.ok(Math.abs(l[1].exp! - 55.2 * (4 - 4 / 7)) < 0.5);
