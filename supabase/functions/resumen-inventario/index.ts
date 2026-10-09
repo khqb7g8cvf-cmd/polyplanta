@@ -48,7 +48,15 @@ Deno.serve(async (req) => {
     return [...g].map(([id, kg]) => `${nombre(id)} ${kg >= 2000 ? ton(kg) : fmt(kg) + ' kg'}`).join(', ') || 'ninguna';
   };
   const fechaTxt = new Intl.DateTimeFormat('es-MX', { timeZone: MX, day: 'numeric', month: 'short' }).format(ayerD).replace('.', '');
-  const params = [fechaTxt, lineas.join(' | ') || 'sin existencias', suma('entrada'), suma('salida'), alertas.join(' | ') || 'sin alertas'].map(limpia);
+  // Modo lista (plantilla v2): cada material va en su propia variable/renglón. N = WA_LINEAS (o ?lineas=N para previsualizar). 0 = formato anterior de 5 variables.
+  const N = Number(url.searchParams.get('lineas') ?? Deno.env.get('WA_LINEAS') ?? 0) || 0;
+  let params: string[];
+  if (N > 0) {
+    const slots = lineas.slice(0, N);
+    if (lineas.length > N) slots[N - 1] += ' | ' + lineas.slice(N).join(' | ');
+    while (slots.length < N) slots.push('—');
+    params = [fechaTxt, ...slots, `Entradas: ${suma('entrada')}. Salidas: ${suma('salida')}`, alertas.join(' | ') || 'sin alertas'].map(limpia);
+  } else params = [fechaTxt, lineas.join(' | ') || 'sin existencias', suma('entrada'), suma('salida'), alertas.join(' | ') || 'sin alertas'].map(limpia);
 
   if (dry) return Response.json({ params });
 
