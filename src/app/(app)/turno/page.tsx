@@ -96,7 +96,7 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
   for (const l of saved0) if (l.orden_id) prod.set(l.orden_id, (prod.get(l.orden_id) || 0) - (Number(l.kilos) || 0));
   for (const l of lines) if (l.orden_id && !l.incidencia) prod.set(l.orden_id, (prod.get(l.orden_id) || 0) + (Number(l.kilos) || 0));
   const he_all = lines.length > 1 && lines.every((l) => Number(l.horas) > 0);
-  const n = lines.length, hs = lines.map((l) => Number(l.horas) || 0), ev = evalMaquinaTurno(lines, lines.map((l) => lineKgh(l, m)), excH, cfg.horasProd || 10, S.ordenes, prod);
+  const n = lines.length, hs = lines.map((l) => Number(l.horas) || 0), ev = evalMaquinaTurno(lines, lines.map((l) => lineKgh(l, m)), excH, cfg.horasProd || 10, S.ordenes, prod, cfg.minCambio);
 
   const saved = (rep?.reporte_lineas || []).filter((l) => l.maquina_id === m.id);
   const [pedir, setPedir] = useState(false), nowT = Date.now();
@@ -190,7 +190,7 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
             <div className="calc" style={{ marginTop: 10 }}>
               {cerrada ? <span>✅ Última orden cumplida (<b>{fmt(l.kilos)} kg</b>): no se evalúa el resto del turno.</span>
                 : exp && tTeo != null && disp != null ? <><span>Debía tardar: <b>{fmt(tTeo, 1)} h</b></span><span>({fmt(l.kilos)} kg ÷ {fmt(kgh, 0)} kg/h)</span>
-                  <span>{he_all ? 'Tardó' : 'Disponible'}: <b>{fmt(disp, 1)} h</b></span>
+                  <span>{he_all ? 'Tardó' : 'Disponible'}: <b>{fmt(disp, 1)} h</b>{n > 1 && cfg.minCambio > 0 ? <span className="mut"> (ya con {cfg.minCambio} min por cambio de orden)</span> : null}</span>
                   {pct != null && <span className={cls(pct, cfg) === 'bad' ? 't-bad' : ''}>Cumplimiento: <b>{pctTxt(pct)}</b></span>}</>
                 : kgh ? <span className="mut">Captura los kilos para calcular cuánto debía tardar.</span>
                 : <span className="mut">Captura golpes, medida y calibre{b ? '' : ' (o kg/h)'} para calcular el tiempo.</span>}

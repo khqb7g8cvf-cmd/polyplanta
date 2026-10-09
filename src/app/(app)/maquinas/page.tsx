@@ -107,7 +107,7 @@ function CfgForm({ onClose }: { onClose: () => void }) {
   return (
     <Modal title="Parámetros y reglas" onClose={onClose} foot={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn primary" disabled={!isDueno} onClick={save}>Guardar</button></>}>
       <fieldset><legend>Turnos y meta</legend>
-        <div className="fg"><NumF l="Horas productivas por turno" v={c.horasProd} on={(v) => p({ horasProd: v ?? 10 })} /><NumF l="Hora en que inicia el turno 1" v={c.turno1Inicio} on={(v) => p({ turno1Inicio: v ?? 7 })} /><NumF l="Margen por kg (MXN, opcional)" v={c.margenKg} on={(v) => p({ margenKg: v })} /></div>
+        <div className="fg"><NumF l="Horas productivas por turno" v={c.horasProd} on={(v) => p({ horasProd: v ?? 10 })} /><NumF l="Hora en que inicia el turno 1" v={c.turno1Inicio} on={(v) => p({ turno1Inicio: v ?? 7 })} /><NumF l="Minutos que se perdonan por cada cambio de orden" v={c.minCambio} on={(v) => p({ minCambio: v ?? 30 })} /><NumF l="Margen por kg (MXN, opcional)" v={c.margenKg} on={(v) => p({ margenKg: v })} /></div>
         <p className="mut" style={{ margin: '10px 0 6px' }}>Paros que se descuentan de la meta del turno (no es culpa del operador):</p>
         <div className="row">{CAUSAS.map((x) => <ChkF key={x} l={x} v={c.excusadas.includes(x)} on={(on) => p({ excusadas: on ? [...c.excusadas, x] : c.excusadas.filter((y) => y !== x) })} />)}</div></fieldset>
       <fieldset><legend>Reglas de amonestación</legend>

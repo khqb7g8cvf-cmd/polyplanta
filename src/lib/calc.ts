@@ -5,7 +5,7 @@ export const CAUSAS = ['Mecánico', 'Eléctrico', 'Falta de material', 'Cambio d
 export const SELLOS: [string, string][] = [['fondo', 'Fondo'], ['lateral', 'Lateral'], ['camiseta', 'Camiseta'], ['pouch', 'Pouch con zipper'], ['ninguno', 'Sin bolseo (solo rollo)']];
 
 export const DEF_CFG: Cfg = {
-  horasProd: 10, turno1Inicio: 7, umbralBajo: 75, umbralOk: 85, nAviso: 3, umbralRec: 105, ventanaDias: 30,
+  horasProd: 10, turno1Inicio: 7, umbralBajo: 75, umbralOk: 85, minCambio: 30, nAviso: 3, umbralRec: 105, ventanaDias: 30,
   nEscrita: 3, nActa: 5, nReconoc: 5, margenKg: null, excusadas: ['Mecánico', 'Eléctrico', 'Falta de material'],
 };
 
@@ -61,20 +61,21 @@ export function paroH(paros: Paro[], maqId: string, fecha: string, turno: number
 /** Resultado de evaluar una máquina en un turno POR TIEMPO: cada orden "debía tardar" kilos ÷ kg/h.
  *  - Con horas capturadas en todas las órdenes: cada una se compara contra sus horas reales (menos su parte de los paros justificados).
  *  - Sin horas: el turno suma los tiempos teóricos de todas las órdenes contra las horas disponibles (horas de turno − paros justificados).
+ *  - Cada cambio de orden (ajustar medida, rollo, fotocelda…) se perdona con `minCambio` minutos, para no exigir como si no hubiera ajustes.
  *  - Si la última orden ya cumplió su cantidad y no hay horas, el resto del turno no se puede juzgar y no se evalúa. */
 export interface EvalLinea { tTeo: number | null; disp: number | null; exp: number | null; expRaw: number | null; cerrada: boolean }
 export function evalMaquinaTurno(
   ls: { orden_id: string | null; kilos: number | null; horas: number | null }[], ks: (number | null)[], excH: number, H: number,
-  ordenes: Pick<Orden, 'id' | 'kilos'>[], producido: Map<string, number>,
+  ordenes: Pick<Orden, 'id' | 'kilos'>[], producido: Map<string, number>, minCambio = 0,
 ): EvalLinea[] {
-  const n = ls.length, kg = ls.map((l) => Number(l.kilos) || 0), hs = ls.map((l) => Number(l.horas) || 0), tot = hs.reduce((a, b) => a + b, 0);
+  const n = ls.length, cambioH = (Math.max(0, n - 1) * (minCambio || 0)) / 60, desc = excH + cambioH, kg = ls.map((l) => Number(l.kilos) || 0), hs = ls.map((l) => Number(l.horas) || 0), tot = hs.reduce((a, b) => a + b, 0);
   const tTeo = ls.map((_, i) => (ks[i] ? kg[i] / (ks[i] as number) : null));
   if (n > 1 && hs.every((x) => x > 0)) {
-    return ls.map((_, i) => { const ef = Math.max(0, hs[i] - excH * (hs[i] / tot)); return { tTeo: tTeo[i], disp: ef, exp: ks[i] ? (ks[i] as number) * ef : null, expRaw: ks[i] ? (ks[i] as number) * hs[i] : null, cerrada: false }; });
+    return ls.map((_, i) => { const ef = Math.max(0, hs[i] - desc * (hs[i] / tot)); return { tTeo: tTeo[i], disp: ef, exp: ks[i] ? (ks[i] as number) * ef : null, expRaw: ks[i] ? (ks[i] as number) * hs[i] : null, cerrada: false }; });
   }
   const last = ls[n - 1], meta = last?.orden_id ? ordenes.find((o) => o.id === last.orden_id)?.kilos : null;
   if (last?.orden_id && meta && (producido.get(last.orden_id) || 0) >= meta) return ls.map((_, i) => ({ tTeo: tTeo[i], disp: null, exp: null, expRaw: null, cerrada: true }));
-  const sumT = tTeo.reduce<number>((a, b) => a + (b || 0), 0), disp = Math.max(0, H - excH);
+  const sumT = tTeo.reduce<number>((a, b) => a + (b || 0), 0), disp = Math.max(0, H - desc);
   return ls.map((_, i) => {
     const share = sumT > 0 ? (tTeo[i] || 0) / sumT : 1 / n;
     return { tTeo: tTeo[i], disp: disp * share, exp: ks[i] ? (ks[i] as number) * disp * share : null, expRaw: ks[i] ? (ks[i] as number) * H * share : null, cerrada: false };
@@ -96,7 +97,7 @@ export function buildLineas(reportes: Reporte[], maquinas: Maquina[], paros: Par
     for (const l of rep.reporte_lineas || []) if (!l.incidencia) byM.set(l.maquina_id, [...(byM.get(l.maquina_id) || []), l]);
     for (const [mid, ls] of byM) {
       const m = mById.get(mid), excH = paroH(paros, mid, rep.fecha, rep.turno, cfg, exc, now), heff = Math.max(0, H - excH);
-      const ks = ls.map((l) => lineKgh(l, m)), ev = evalMaquinaTurno(ls, ks, excH, H, ordenes, prod), tot = ls.reduce((a, x) => a + (Number(x.horas) || 0), 0);
+      const ks = ls.map((l) => lineKgh(l, m)), ev = evalMaquinaTurno(ls, ks, excH, H, ordenes, prod, cfg.minCambio), tot = ls.reduce((a, x) => a + (Number(x.horas) || 0), 0);
       ls.forEach((l, i) => {
         const kgh = ks[i], kilos = Number(l.kilos) || 0, { exp, expRaw, cerrada } = ev[i], share = tot > 0 && (Number(l.horas) || 0) > 0 ? (Number(l.horas) || 0) / tot : 1 / ls.length;
         out.push({ ...l, kilos, fecha: rep.fecha, turno: rep.turno, tipo: m?.tipo, kgh, exp, expRaw, excH: excH * share, pct: exp ? kilos / exp : null, pctRaw: expRaw ? kilos / expRaw : null, cerrada });
