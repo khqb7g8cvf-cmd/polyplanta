@@ -21,6 +21,10 @@ export default function Hoy() {
   const ls = last ? L.filter((x) => x.fecha === last.fecha && x.turno === last.turno) : [];
   const s = sumL(ls);
   const porA = (['extrusion', 'impresion', 'bolseo'] as Tipo[]).map((t) => ({ t, s: sumL(ls.filter((x) => x.tipo === t)) })).filter((x) => x.s.n);
+  // Día completo: los dos turnos de la fecha del último reporte.
+  const ld = last ? L.filter((x) => x.fecha === last.fecha) : [], sd = sumL(ld);
+  const dA = (['extrusion', 'impresion', 'bolseo'] as Tipo[]).map((t) => ({ t, s: sumL(ld.filter((x) => x.tipo === t)) })).filter((x) => x.s.n);
+  const dT = ([1, 2] as const).map((k) => ({ k, s: sumL(ld.filter((x) => x.turno === k)) })).filter((x) => x.s.n);
 
   return (
     <>
@@ -39,6 +43,16 @@ export default function Hoy() {
             </div>
             <div className="hareas">{porA.map((x) => <div key={x.t}><small>{AREAS[x.t]}</small><b className={cls(x.s.pct, cfg)}>{pctTxt(x.s.pct)}</b></div>)}</div>
             <div><button className="btn" onClick={() => { setTurno({ fecha: last.fecha, turno: last.turno }); r.push('/turno'); }}>Ver reporte completo</button></div>
+          </div>
+        )}
+        {last && ld.length > ls.length && (
+          <div className={`hero ${cls(sd.pct, cfg)}`} style={{ marginTop: 12 }}>
+            <div>
+              <small>Rendimiento del día · {dmy(last.fecha)} · {dT.length === 2 ? 'turnos 1 y 2' : 'turno ' + dT[0]?.k}</small>
+              <div className="big">{pctTxt(sd.pct)}</div>
+              <div className="hs">{sd.exp ? <>Debían producirse <b>{fmt(sd.exp)} kg</b> y se reportaron <b>{fmt(sd.kgE)} kg</b>. {gapTxt(sd.pct)}{sd.falta ? ` · ${fmt(sd.falta)} kg menos${money(sd.falta)}` : ''}.</> : 'Faltan datos para calcular lo que debía producirse.'}</div>
+            </div>
+            <div className="hareas">{dT.length > 1 && dT.map((x) => <div key={x.k}><small>Turno {x.k}</small><b className={cls(x.s.pct, cfg)}>{pctTxt(x.s.pct)}</b></div>)}{dA.map((x) => <div key={x.t}><small>{AREAS[x.t]}</small><b className={cls(x.s.pct, cfg)}>{pctTxt(x.s.pct)}</b></div>)}</div>
           </div>
         )}
       </section>
