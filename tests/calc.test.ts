@@ -92,12 +92,12 @@ test('proveedores: precio ponderado y salidas por motivo', () => {
 });
 
 import { lineaLibre, autorizacion } from '../src/lib/permisos.ts';
-test('candado: 15 minutos o autorización vigente', () => {
+test('turnos sin candado para el encargado; autorización vigente se sigue detectando', () => {
   const now = Date.parse('2026-10-08T18:00:00Z');
   const l = { created_by: 'u1', created_at: '2026-10-08T17:50:00Z', reporte_id: 'r1', maquina_id: 'b1' };
   assert.equal(lineaLibre(l, 'u1', [], now), true);
-  assert.equal(lineaLibre({ ...l, created_at: '2026-10-08T17:40:00Z' }, 'u1', [], now), false);
-  assert.equal(lineaLibre(l, 'u2', [], now), false);
+  assert.equal(lineaLibre({ ...l, created_at: '2026-10-08T17:40:00Z' }, 'u1', [], now), true); // sin candado: el encargado corrige turnos
+  assert.equal(lineaLibre(l, 'u2', [], now), true);
   const s = { id: 's', tabla: 'reporte_lineas', registro_id: null, reporte_id: 'r1', maquina_id: 'b1', resumen: '', motivo: 'x', estado: 'aprobada' as const, solicitada_por: 'u2', solicitada_at: '', resuelta_por: null, resuelta_at: null, vence_at: '2026-10-08T18:30:00Z' };
   assert.equal(lineaLibre({ ...l, created_at: '2026-10-08T17:00:00Z' }, 'u2', [s], now), true);
   assert.ok(autorizacion([s], 'r1', 'b1', 'u2', now));
@@ -148,4 +148,11 @@ test('zona amarilla (75-85%) no sanciona; 3 amarillos piden presionar', () => {
 test('cambio de orden: se perdonan minutos por cada cambio', () => {
   const l = buildLineas([rep('r1', '2026-10-06', 1, [linea({ kilos: 276 }), linea({ kilos: 138 })])], [maq({ id: 'b1' })], [], { ...DEF_CFG, minCambio: 60 }, now);
   assert.ok(Math.abs(l[0].exp! + l[1].exp! - 55.2 * 9) < 0.5); // 10 h - 1 cambio de 60 min
+});
+
+test('horas perdidas se descuentan del tiempo disponible', () => {
+  const l = buildLineas([rep('r1', '2026-10-06', 1, [linea({ kilos: 400, horas_perdidas: 1 })])], [maq({ id: 'b1' })], [], DEF_CFG, now);
+  assert.ok(Math.abs(l[0].exp! - 55.2 * 9) < 0.5);
+  const m = buildLineas([rep('r1', '2026-10-06', 1, [linea({ horas: 3, horas_perdidas: 0.5 }), linea({ horas: 4 })])], [maq({ id: 'b1' })], [], { ...DEF_CFG, minCambio: 0 }, now);
+  assert.ok(Math.abs(m[0].exp! - 55.2 * 2.5) < 0.5 && Math.abs(m[1].exp! - 55.2 * 4) < 0.5);
 });

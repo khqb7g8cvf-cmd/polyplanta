@@ -12,8 +12,8 @@ export function autorizacion(sols: SolicitudCambio[], reporteId: string | undefi
 export function pendiente(sols: SolicitudCambio[], reporteId: string | undefined, maquinaId: string, uid: string | undefined) {
   return sols.find((s) => s.tabla === 'reporte_lineas' && s.estado === 'pendiente' && s.solicitada_por === uid && s.reporte_id === reporteId && s.maquina_id === maquinaId);
 }
-/** ¿Puede el encargado corregir esta línea ya guardada? (suya y reciente, o con autorización del dueño) */
-export function lineaLibre(l: Linea, uid: string | undefined, sols: SolicitudCambio[], now: number) {
-  const suya = !!uid && l.created_by === uid && !!l.created_at && now - Date.parse(l.created_at) < VENTANA_MIN * 60000;
-  return suya || !!autorizacion(sols, l.reporte_id, l.maquina_id, uid, now);
+/** ¿Puede el encargado corregir esta línea ya guardada? Sí, siempre: el dueño decidió no ponerle candado a los reportes de turno
+ *  (cada cambio queda en la bitácora y solo el dueño puede borrar). Se conserva la firma por si se vuelve a poner un candado. */
+export function lineaLibre(_l: Linea, _uid: string | undefined, _sols: SolicitudCambio[], _now: number) {
+  return true;
 }

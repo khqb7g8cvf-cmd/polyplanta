@@ -62,20 +62,21 @@ export function paroH(paros: Paro[], maqId: string, fecha: string, turno: number
  *  - Con horas capturadas en todas las órdenes: cada una se compara contra sus horas reales (menos su parte de los paros justificados).
  *  - Sin horas: el turno suma los tiempos teóricos de todas las órdenes contra las horas disponibles (horas de turno − paros justificados).
  *  - Cada cambio de orden (ajustar medida, rollo, fotocelda…) se perdona con `minCambio` minutos, para no exigir como si no hubiera ajustes.
+ *  - `horas_perdidas` (ajustes, cambio de banda, falla, falta de material) que el encargado anota se descuentan también del tiempo disponible.
  *  - Si la última orden ya cumplió su cantidad y no hay horas, el resto del turno no se puede juzgar y no se evalúa. */
 export interface EvalLinea { tTeo: number | null; disp: number | null; exp: number | null; expRaw: number | null; cerrada: boolean }
 export function evalMaquinaTurno(
-  ls: { orden_id: string | null; kilos: number | null; horas: number | null }[], ks: (number | null)[], excH: number, H: number,
+  ls: { orden_id: string | null; kilos: number | null; horas: number | null; horas_perdidas?: number | null }[], ks: (number | null)[], excH: number, H: number,
   ordenes: Pick<Orden, 'id' | 'kilos'>[], producido: Map<string, number>, minCambio = 0,
 ): EvalLinea[] {
-  const n = ls.length, cambioH = (Math.max(0, n - 1) * (minCambio || 0)) / 60, desc = excH + cambioH, kg = ls.map((l) => Number(l.kilos) || 0), hs = ls.map((l) => Number(l.horas) || 0), tot = hs.reduce((a, b) => a + b, 0);
+  const n = ls.length, cambioH = (Math.max(0, n - 1) * (minCambio || 0)) / 60, desc = excH + cambioH, ps = ls.map((l) => Math.max(0, Number(l.horas_perdidas) || 0)), kg = ls.map((l) => Number(l.kilos) || 0), hs = ls.map((l) => Number(l.horas) || 0), tot = hs.reduce((a, b) => a + b, 0);
   const tTeo = ls.map((_, i) => (ks[i] ? kg[i] / (ks[i] as number) : null));
   if (n > 1 && hs.every((x) => x > 0)) {
-    return ls.map((_, i) => { const ef = Math.max(0, hs[i] - desc * (hs[i] / tot)); return { tTeo: tTeo[i], disp: ef, exp: ks[i] ? (ks[i] as number) * ef : null, expRaw: ks[i] ? (ks[i] as number) * hs[i] : null, cerrada: false }; });
+    return ls.map((_, i) => { const ef = Math.max(0, hs[i] - desc * (hs[i] / tot) - ps[i]); return { tTeo: tTeo[i], disp: ef, exp: ks[i] ? (ks[i] as number) * ef : null, expRaw: ks[i] ? (ks[i] as number) * hs[i] : null, cerrada: false }; });
   }
   const last = ls[n - 1], meta = last?.orden_id ? ordenes.find((o) => o.id === last.orden_id)?.kilos : null;
   if (last?.orden_id && meta && (producido.get(last.orden_id) || 0) >= meta) return ls.map((_, i) => ({ tTeo: tTeo[i], disp: null, exp: null, expRaw: null, cerrada: true }));
-  const sumT = tTeo.reduce<number>((a, b) => a + (b || 0), 0), disp = Math.max(0, H - desc);
+  const sumT = tTeo.reduce<number>((a, b) => a + (b || 0), 0), disp = Math.max(0, H - desc - ps.reduce((a, b) => a + b, 0));
   return ls.map((_, i) => {
     const share = sumT > 0 ? (tTeo[i] || 0) / sumT : 1 / n;
     return { tTeo: tTeo[i], disp: disp * share, exp: ks[i] ? (ks[i] as number) * disp * share : null, expRaw: ks[i] ? (ks[i] as number) * H * share : null, cerrada: false };

@@ -79,7 +79,7 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
   const ords = S.ordenes.filter((o) => o.estado !== 'Terminada'), b = m.tipo === 'bolseo';
   const mk = (): Draft => {
     const prev = L.filter((x) => x.maquina_id === m.id).sort((a, c) => (c.fecha + c.turno).localeCompare(a.fecha + a.turno))[0];
-    return { key: Math.random().toString(36).slice(2), maquina_id: m.id, orden_id: null, cliente: prev?.cliente || '', ancho: prev?.ancho ?? null, largo: prev?.largo ?? null, calibre: prev?.calibre ?? null, densidad: prev?.densidad || 'baja', golpes: prev?.golpes ?? null, carriles: prev?.carriles ?? null, kgh: prev?.kgh ?? null, horas: null, operario: '', kilos: null as unknown as number, nota: '', justificada: false, incidencia: null };
+    return { key: Math.random().toString(36).slice(2), maquina_id: m.id, orden_id: null, cliente: prev?.cliente || '', ancho: prev?.ancho ?? null, largo: prev?.largo ?? null, calibre: prev?.calibre ?? null, densidad: prev?.densidad || 'baja', golpes: prev?.golpes ?? null, carriles: prev?.carriles ?? null, kgh: prev?.kgh ?? null, horas: null, operario: '', kilos: null as unknown as number, nota: '', justificada: false, horas_perdidas: null, incidencia: null };
   };
   const [lines, setLines] = useState<Draft[]>(() => {
     const ex = (rep?.reporte_lineas || []).filter((l) => l.maquina_id === m.id).map((l) => ({ ...l, key: l.id }));
@@ -111,6 +111,7 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
     toast('Producción borrada'); refresh(); onClose();
   }
   async function save() {
+    if (lines.some((l) => !l.incidencia && Number(l.horas_perdidas) > 0 && !(l.nota || '').trim())) return toast('Anota en la nota por qué se perdieron esas horas (ej. cambio de banda).', true);
     if (lines.some((l) => !l.incidencia && (!l.operario.trim() || l.kilos == null || Number.isNaN(Number(l.kilos))))) return toast('Falta el operador o los kilos.', true);
     setBusy(true);
     let r: { id: string } | null = rep ? { id: rep.id } : ((await db.from('reportes').select('id').eq('fecha', fecha).eq('turno', t).maybeSingle()).data as { id: string } | null);
@@ -123,7 +124,7 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
     const old = (rep?.reporte_lineas || []).filter((l) => l.maquina_id === m.id).map((l) => l.id);
     const del = old.filter((id) => !keep.includes(id));
     if (del.length) { const e = await db.from('reporte_lineas').delete().in('id', del); if (e.error) { setBusy(false); return toast(e.error.message, true); } }
-    const rows = lines.map(({ key: _k, created_by: _cb, created_at: _ca, ...l }) => ({ ...l, incidencia: l.incidencia || null, kilos: l.incidencia ? 0 : l.kilos, operario: l.operario.trim() || (l.incidencia === 'sin_operador' ? 'Sin operador' : '—'), cliente: (l.cliente || '').trim(), nota: (l.nota || '').trim(), reporte_id: r.id, maquina_id: m.id }));
+    const rows = lines.map(({ key: _k, created_by: _cb, created_at: _ca, ...l }) => ({ ...l, incidencia: l.incidencia || null, horas_perdidas: l.incidencia ? null : Number(l.horas_perdidas) > 0 ? Number(l.horas_perdidas) : null, kilos: l.incidencia ? 0 : l.kilos, operario: l.operario.trim() || (l.incidencia === 'sin_operador' ? 'Sin operador' : '—'), cliente: (l.cliente || '').trim(), nota: (l.nota || '').trim(), reporte_id: r.id, maquina_id: m.id }));
     const upd = rows.filter((x) => x.id), ins = rows.filter((x) => !x.id).map(({ id: _i, ...x }) => x);
     let ok = true;
     for (const { id, reporte_id: _r, ...campos } of upd) { if (ok) ok = await run(db.from('reporte_lineas').update(campos).eq('id', id as string)); }
@@ -181,7 +182,8 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
             <div className="fg" style={{ marginTop: 10 }}>
               <OperadorSel l="Operador" area={m.tipo} v={l.operario} on={(v) => set(i, { operario: v })} />
               <NumF l="Kilos reportados" v={l.kilos as number | null} on={(v) => set(i, { kilos: v as number })} style={{ fontSize: 18, fontWeight: 600 }} />
-              <TxtF l="Nota" v={l.nota} on={(v) => set(i, { nota: v })} />
+              <NumF l="Horas perdidas (ajuste, falla, falta de material…)" v={l.horas_perdidas ?? null} on={(v) => set(i, { horas_perdidas: v })} />
+              <TxtF l={Number(l.horas_perdidas) > 0 ? 'Nota (qué pasó, obligatoria)' : 'Nota'} v={l.nota} on={(v) => set(i, { nota: v })} />
             </div>
             <div className="row" style={{ marginTop: 10, justifyContent: 'space-between' }}>
               <ChkF l="Justificada por el jefe (no cuenta para amonestación)" v={l.justificada} on={(v) => set(i, { justificada: v })} />
@@ -190,7 +192,7 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
             <div className="calc" style={{ marginTop: 10 }}>
               {cerrada ? <span>✅ Última orden cumplida (<b>{fmt(l.kilos)} kg</b>): no se evalúa el resto del turno.</span>
                 : exp && tTeo != null && disp != null ? <><span>Debía tardar: <b>{fmt(tTeo, 1)} h</b></span><span>({fmt(l.kilos)} kg ÷ {fmt(kgh, 0)} kg/h)</span>
-                  <span>{he_all ? 'Tardó' : 'Disponible'}: <b>{fmt(disp, 1)} h</b>{n > 1 && cfg.minCambio > 0 ? <span className="mut"> (ya con {cfg.minCambio} min por cambio de orden)</span> : null}</span>
+                  <span>{he_all ? 'Tardó' : 'Disponible'}: <b>{fmt(disp, 1)} h</b>{n > 1 && cfg.minCambio > 0 ? <span className="mut"> (ya con {cfg.minCambio} min por cambio de orden)</span> : null}{Number(l.horas_perdidas) > 0 ? <span className="mut"> (menos {fmt(Number(l.horas_perdidas), 1)} h perdidas)</span> : null}</span>
                   {pct != null && <span className={cls(pct, cfg) === 'bad' ? 't-bad' : ''}>Cumplimiento: <b>{pctTxt(pct)}</b></span>}</>
                 : kgh ? <span className="mut">Captura los kilos para calcular cuánto debía tardar.</span>
                 : <span className="mut">Captura golpes, medida y calibre{b ? '' : ' (o kg/h)'} para calcular el tiempo.</span>}
