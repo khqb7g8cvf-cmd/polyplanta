@@ -51,6 +51,8 @@ export interface LineaCalc extends LineaRow {
   fecha: string; turno: 1 | 2; tipo: Tipo | undefined;
   kgh: number | null; exp: number | null; expRaw: number | null; excH: number;
   pct: number | null; pctRaw: number | null;
+  /** Orden que ya se terminó (no es la última del turno, o ya se cumplió su cantidad): no se evalúa. */
+  cerrada?: boolean;
 }
 export interface OpTurno {
   operario: string; fecha: string; turno: 1 | 2; rid: string; lines: LineaCalc[];

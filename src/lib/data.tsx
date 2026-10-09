@@ -58,7 +58,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       db.from('personas').select('*').eq('activo', true).order('nombre'),
       db.from('config').select('data').eq('id', 1).maybeSingle(),
       db.from('ordenes').select('*').order('fecha_entrega', { nullsFirst: false }),
-      db.from('reportes').select('*, reporte_lineas(*)').gte('fecha', cut),
+      db.from('reportes').select('*, reporte_lineas(*)').gte('fecha', cut).order('created_at', { referencedTable: 'reporte_lineas', ascending: true }),
       db.from('paros').select('*').or(`fin.is.null,inicio.gte.${cutTs}`),
       db.from('mtto').select('*'),
       db.from('amonestaciones').select('*').order('fecha', { ascending: false }),
@@ -108,7 +108,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [db, load, refresh]);
 
 
-  const L = useMemo(() => buildLineas(S.reportes, S.maquinas, S.paros, cfg, now), [S.reportes, S.maquinas, S.paros, cfg, now]);
+  const L = useMemo(() => buildLineas(S.reportes, S.maquinas, S.paros, cfg, now, S.ordenes), [S.reportes, S.maquinas, S.paros, cfg, now, S.ordenes]);
   const OT = useMemo(() => buildOT(L), [L]);
   const rol = me?.rol;
   const run: Ctx['run'] = useCallback(async (p, okMsg) => {

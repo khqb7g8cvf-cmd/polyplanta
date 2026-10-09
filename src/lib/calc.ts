@@ -66,8 +66,21 @@ export function horasEfectivas(hs: number[], excH: number, H: number): { ef: num
   return { all, raw: hs.map(() => H / n), ef: hs.map(() => Math.max(0, H - excH) / n) };
 }
 
+/** Una orden está terminada si no es la última del turno en la máquina (la máquina pasó a otra) o si ya se produjo su cantidad. */
+export function ordenCerrada(i: number, n: number, ordenId: string | null, ordenes: Pick<Orden, 'id' | 'kilos'>[], producido: Map<string, number>): boolean {
+  if (i < n - 1) return true;
+  const meta = ordenId ? ordenes.find((o) => o.id === ordenId)?.kilos : null;
+  return !!(ordenId && meta && (producido.get(ordenId) || 0) >= meta);
+}
+export const producidoPorOrden = (reportes: Reporte[]) => {
+  const g = new Map<string, number>();
+  for (const r of reportes) for (const l of r.reporte_lineas || []) if (l.orden_id && !l.incidencia) g.set(l.orden_id, (g.get(l.orden_id) || 0) + (Number(l.kilos) || 0));
+  return g;
+};
+
 /** Calcula, por línea de reporte, lo que debía producirse (ya descontados paros justificados). */
-export function buildLineas(reportes: Reporte[], maquinas: Maquina[], paros: Paro[], cfg: Cfg, now = Date.now()): LineaCalc[] {
+export function buildLineas(reportes: Reporte[], maquinas: Maquina[], paros: Paro[], cfg: Cfg, now = Date.now(), ordenes: Pick<Orden, 'id' | 'kilos'>[] = []): LineaCalc[] {
+  const prod = producidoPorOrden(reportes);
   const out: LineaCalc[] = [], exc = new Set(cfg.excusadas || []), H = cfg.horasProd || 10;
   const mById = new Map(maquinas.map((m) => [m.id, m]));
   for (const rep of reportes) {
@@ -78,8 +91,9 @@ export function buildLineas(reportes: Reporte[], maquinas: Maquina[], paros: Par
       const hs = ls.map((x) => Number(x.horas) || 0), he = horasEfectivas(hs, excH, H), tot = hs.reduce((a, b) => a + b, 0);
       ls.forEach((l, i) => {
         const share = he.all ? hs[i] / tot : 1 / ls.length, kgh = lineKgh(l, m), kilos = Number(l.kilos) || 0;
-        const exp = kgh ? kgh * he.ef[i] : null, expRaw = kgh ? kgh * he.raw[i] : null;
-        out.push({ ...l, kilos, fecha: rep.fecha, turno: rep.turno, tipo: m?.tipo, kgh, exp, expRaw, excH: excH * share, pct: exp ? kilos / exp : null, pctRaw: expRaw ? kilos / expRaw : null });
+        const cerrada = ordenCerrada(i, ls.length, l.orden_id, ordenes, prod);
+        const exp = kgh && !cerrada ? kgh * he.ef[i] : null, expRaw = kgh && !cerrada ? kgh * he.raw[i] : null;
+        out.push({ ...l, kilos, fecha: rep.fecha, turno: rep.turno, tipo: m?.tipo, kgh, exp, expRaw, excH: excH * share, pct: exp ? kilos / exp : null, pctRaw: expRaw ? kilos / expRaw : null, cerrada });
       });
     }
   }
