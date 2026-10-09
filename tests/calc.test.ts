@@ -109,3 +109,15 @@ test('incidencia (faltó operador / máquina no trabajó) no entra a la estadís
   assert.equal(l.length, 0);
   assert.equal(buildOT(l).length, 0);
 });
+
+test('varias órdenes: lo esperado usa las horas capturadas de cada una', () => {
+  const l = buildLineas([rep('r1', '2026-10-06', 1, [linea({ horas: 3 }), linea({ horas: 4 })])], [maq({ id: 'b1' })], [], DEF_CFG);
+  assert.ok(Math.abs(l[0].exp! - 55.2 * 3) < 0.5);
+  assert.ok(Math.abs(l[1].exp! - 55.2 * 4) < 0.5);
+});
+
+test('varias órdenes: el paro justificado se descuenta en proporción a las horas', () => {
+  const paros: Paro[] = [{ id: 'p', maquina_id: 'b1', causa: 'Mecánico', inicio: new Date(2026, 9, 6, 9, 0).toISOString(), fin: new Date(2026, 9, 6, 10, 0).toISOString(), orden_id: null, nota: null }];
+  const l = buildLineas([rep('r1', '2026-10-06', 1, [linea({ horas: 3 }), linea({ horas: 4 })])], [maq({ id: 'b1' })], paros, DEF_CFG);
+  assert.ok(Math.abs(l[0].exp! + l[1].exp! - 55.2 * 6) < 0.5);
+});

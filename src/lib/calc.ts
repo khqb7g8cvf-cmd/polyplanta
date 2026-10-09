@@ -58,6 +58,14 @@ export function paroH(paros: Paro[], maqId: string, fecha: string, turno: number
   return h;
 }
 
+/** Horas efectivas de cada línea (orden) en un turno: con horas capturadas en todas, usa esas horas reales menos su parte de los paros justificados;
+ *  si no, reparte las horas efectivas del turno (horas de turno − paros justificados) en partes iguales. */
+export function horasEfectivas(hs: number[], excH: number, H: number): { ef: number[]; raw: number[]; all: boolean } {
+  const n = hs.length, tot = hs.reduce((a, b) => a + b, 0), all = n > 1 && hs.every((x) => x > 0);
+  if (all) return { all, raw: hs, ef: hs.map((h) => Math.max(0, h - excH * (h / tot))) };
+  return { all, raw: hs.map(() => H / n), ef: hs.map(() => Math.max(0, H - excH) / n) };
+}
+
 /** Calcula, por línea de reporte, lo que debía producirse (ya descontados paros justificados). */
 export function buildLineas(reportes: Reporte[], maquinas: Maquina[], paros: Paro[], cfg: Cfg, now = Date.now()): LineaCalc[] {
   const out: LineaCalc[] = [], exc = new Set(cfg.excusadas || []), H = cfg.horasProd || 10;
@@ -67,10 +75,10 @@ export function buildLineas(reportes: Reporte[], maquinas: Maquina[], paros: Par
     for (const l of rep.reporte_lineas || []) if (!l.incidencia) byM.set(l.maquina_id, [...(byM.get(l.maquina_id) || []), l]);
     for (const [mid, ls] of byM) {
       const m = mById.get(mid), excH = paroH(paros, mid, rep.fecha, rep.turno, cfg, exc, now), heff = Math.max(0, H - excH);
-      const hs = ls.map((x) => Number(x.horas) || 0), all = ls.length > 1 && hs.every((x) => x > 0), tot = hs.reduce((a, b) => a + b, 0);
+      const hs = ls.map((x) => Number(x.horas) || 0), he = horasEfectivas(hs, excH, H), tot = hs.reduce((a, b) => a + b, 0);
       ls.forEach((l, i) => {
-        const share = all ? hs[i] / tot : 1 / ls.length, kgh = lineKgh(l, m), kilos = Number(l.kilos) || 0;
-        const exp = kgh ? kgh * heff * share : null, expRaw = kgh ? kgh * H * share : null;
+        const share = he.all ? hs[i] / tot : 1 / ls.length, kgh = lineKgh(l, m), kilos = Number(l.kilos) || 0;
+        const exp = kgh ? kgh * he.ef[i] : null, expRaw = kgh ? kgh * he.raw[i] : null;
         out.push({ ...l, kilos, fecha: rep.fecha, turno: rep.turno, tipo: m?.tipo, kgh, exp, expRaw, excH: excH * share, pct: exp ? kilos / exp : null, pctRaw: expRaw ? kilos / expRaw : null });
       });
     }
