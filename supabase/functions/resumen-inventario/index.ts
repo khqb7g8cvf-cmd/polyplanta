@@ -14,7 +14,7 @@ Deno.serve(async (req) => {
   const { data: sec } = await sb.from('secretos_internos').select('valor').eq('nombre', 'cron_resumen').maybeSingle();
   if (!sec || req.headers.get('x-cron-secret') !== sec.valor) return new Response('no autorizado', { status: 401 });
   const url = new URL(req.url);
-  const dry = url.searchParams.get('dry') === '1';
+  const dry = url.searchParams.get('dry') === '1', solo = url.searchParams.get('solo') === '1'; // solo=1: prueba, solo al primer número de WA_TO
 
   const hoy = ymd(new Date()), ayerD = new Date(Date.now() - 864e5), ayer = ymd(ayerD);
   const desde = `${ayer}T00:00:00-06:00`, hasta = `${hoy}T00:00:00-06:00`;
@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
 
   if (dry) return Response.json({ params });
 
-  const token = Deno.env.get('WA_TOKEN'), phone = Deno.env.get('WA_PHONE_ID'), to = (Deno.env.get('WA_TO') || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const token = Deno.env.get('WA_TOKEN'), phone = Deno.env.get('WA_PHONE_ID'), to = (Deno.env.get('WA_TO') || '').split(',').map((s) => s.trim()).filter(Boolean).slice(0, solo ? 1 : undefined);
   if (!token || !phone || !to.length) return new Response('faltan WA_TOKEN, WA_PHONE_ID o WA_TO', { status: 500 });
   const tpl = Deno.env.get('WA_TEMPLATE') || 'resumen_inventario', lang = Deno.env.get('WA_LANG') || 'es_MX';
   const res = [];

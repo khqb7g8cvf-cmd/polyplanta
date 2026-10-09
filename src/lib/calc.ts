@@ -5,7 +5,7 @@ export const CAUSAS = ['Mecánico', 'Eléctrico', 'Falta de material', 'Cambio d
 export const SELLOS: [string, string][] = [['fondo', 'Fondo'], ['lateral', 'Lateral'], ['camiseta', 'Camiseta'], ['pouch', 'Pouch con zipper'], ['ninguno', 'Sin bolseo (solo rollo)']];
 
 export const DEF_CFG: Cfg = {
-  horasProd: 10, turno1Inicio: 7, umbralBajo: 75, umbralOk: 85, minCambio: 30, nAviso: 3, umbralRec: 105, ventanaDias: 30,
+  horasProd: 10, turno1Inicio: 7, umbralBajo: 75, umbralOk: 85, minCambio: 20, nAviso: 3, umbralRec: 105, ventanaDias: 30,
   nEscrita: 3, nActa: 5, nReconoc: 5, margenKg: null, excusadas: ['Mecánico', 'Eléctrico', 'Falta de material'],
 };
 
