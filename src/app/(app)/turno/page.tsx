@@ -6,6 +6,7 @@ import { fmt, hhmm, ymd } from '@/lib/format';
 import { Bar, ChkF, DateF, Modal, NumF, Pill, SelF, Tile, TxtF, Fld } from '@/components/ui';
 import { lineMed, shiftName, useMoney } from '@/components/shared';
 import PedirCambio from '@/components/PedirCambio';
+import OperadorSel from '@/components/OperadorSel';
 import { autorizacion, lineaLibre, pendiente, VENTANA_MIN } from '@/lib/permisos';
 import type { LineaRow, Maquina, Tipo } from '@/lib/types';
 
@@ -135,7 +136,6 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
       <p className="mut" style={{ margin: '0 0 12px' }}>{m.nombre} · {shiftName(fecha, t)}. {ps.length ? <>Paros registrados en este turno: {ps.map((p, i) => <span key={p.id}>{i ? ', ' : ''}<b>{p.causa}</b> {fmt(paroH([p], m.id, fecha, t, cfg), 1)} h{exc.has(p.causa) ? ' (se descuenta de la meta)' : ' (no se descuenta)'}</span>)}.</> : 'Sin paros registrados en este turno.'}</p>
       {bloqueado && <div className="banner" style={{ marginBottom: 12 }}>🔒 Este reporte ya se cerró (pasaron más de {VENTANA_MIN} minutos). Para cambiarlo, pide autorización al dueño.</div>}
       {!isDueno && !bloqueado && aut && aut.vence_at && <div className="banner" style={{ marginBottom: 12 }}>✅ El dueño autorizó el cambio hasta las {hhmm(aut.vence_at)}.</div>}
-      <datalist id="dl_oper">{S.personas.filter((p) => p.rol === 'operador').map((p) => <option key={p.id} value={p.nombre} />)}</datalist>
       {lines.length === 1 && (
         <div className="row" style={{ gap: 18, marginBottom: 12, flexWrap: 'wrap' }}>
           <ChkF l="Faltó el operador" v={lines[0].incidencia === 'sin_operador'} on={(v) => set(0, { incidencia: v ? 'sin_operador' : null })} />
@@ -146,7 +146,7 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
         <fieldset disabled={bloqueado && !!lines[0].id}>
           <legend>{lines[0].incidencia === 'sin_operador' ? 'Inasistencia del operador' : 'Máquina sin trabajar'}</legend>
           <div className="fg">
-            {lines[0].incidencia === 'sin_operador' && <Fld l="¿Quién faltó? (opcional)"><input list="dl_oper" autoComplete="off" value={lines[0].operario === 'Sin operador' ? '' : lines[0].operario} onChange={(e) => set(0, { operario: e.target.value })} /></Fld>}
+            {lines[0].incidencia === 'sin_operador' && <OperadorSel l="¿Quién faltó? (opcional)" opcional area={m.tipo} v={lines[0].operario === 'Sin operador' ? '' : lines[0].operario} on={(v) => set(0, { operario: v })} />}
             <TxtF l="Nota" v={lines[0].nota} on={(v) => set(0, { nota: v })} />
           </div>
           <p className="mut" style={{ marginTop: 10 }}>Este turno no cuenta en las estadísticas de la máquina ni del operador.</p>
@@ -174,7 +174,7 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
               {n > 1 && <NumF l="Horas en esta orden" v={l.horas} on={(v) => set(i, { horas: v })} />}
             </div>
             <div className="fg" style={{ marginTop: 10 }}>
-              <Fld l="Operador"><input list="dl_oper" autoComplete="off" value={l.operario} onChange={(e) => set(i, { operario: e.target.value })} /></Fld>
+              <OperadorSel l="Operador" area={m.tipo} v={l.operario} on={(v) => set(i, { operario: v })} />
               <NumF l="Kilos reportados" v={l.kilos as number | null} on={(v) => set(i, { kilos: v as number })} style={{ fontSize: 18, fontWeight: 600 }} />
               <TxtF l="Nota" v={l.nota} on={(v) => set(i, { nota: v })} />
             </div>
