@@ -34,10 +34,8 @@ Deno.serve(async (req) => {
   const lineas: string[] = [], alertas: string[] = [];
   for (const m of mats.data!) {
     const e = ex[m.id] || { silo: 0, sacos: 0 }, total = e.silo + e.sacos;
-    const cons = -(mov30.data!.filter((x) => x.material_id === m.id).reduce((s, x) => s + Number(x.delta_kg), 0)) / 30;
-    const dias = cons > 0 ? Math.round(total / cons) : null;
-    if (m.silo_kg) lineas.push(`${m.nombre}: silo ${ton(e.silo)} (${Math.round((e.silo / Number(m.silo_kg)) * 100)}%), sacos ${fmt(e.sacos)} kg${dias != null ? `, alcanza ~${dias} días` : ''}`);
-    else if (total > 0 || cons > 0) lineas.push(`${m.nombre}: ${fmt(total)} kg${dias != null ? ` (~${dias} días)` : ''}`);
+    if (m.silo_kg) lineas.push(`${m.nombre}: silo ${ton(e.silo)} (${Math.round((e.silo / Number(m.silo_kg)) * 100)}%), sacos ${fmt(e.sacos)} kg`);
+    else if (total > 0) lineas.push(`${m.nombre}: ${fmt(total)} kg`);
     if (total < Number(m.minimo_kg)) alertas.push(`${m.nombre} bajo mínimo (${fmt(total)} de ${fmt(Number(m.minimo_kg))} kg)`);
     if (m.silo_kg && e.silo / Number(m.silo_kg) > 0.95) alertas.push(`silo de ${m.nombre} casi lleno`);
   }
