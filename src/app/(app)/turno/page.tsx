@@ -16,27 +16,33 @@ export default function Turno() {
   const { S, L, cfg, turno, setTurno, maqs, canProd } = useData();
   const money = useMoney();
   const [cap, setCap] = useState<string | null>(null);
+  const [dia, setDia] = useState(false);
   const { fecha, turno: t } = turno;
-  const ls = useMemo(() => L.filter((x) => x.fecha === fecha && x.turno === t), [L, fecha, t]);
+  const ls = useMemo(() => L.filter((x) => x.fecha === fecha && (dia || x.turno === t)), [L, fecha, t, dia]);
   const s = sumL(ls), activas = maqs().filter((m) => (m.estado || 'Activa') === 'Activa');
   const incs = new Map<string, string>();
-  for (const l of S.reportes.find((r) => r.fecha === fecha && r.turno === t)?.reporte_lineas || []) if (l.incidencia) incs.set(l.maquina_id, l.incidencia);
+  for (const r of S.reportes.filter((r) => r.fecha === fecha && (dia || r.turno === t))) for (const l of r.reporte_lineas || []) if (l.incidencia) incs.set(l.maquina_id, l.incidencia);
   const rep = activas.filter((m) => ls.some((x) => x.maquina_id === m.id) || incs.has(m.id)).length;
-  const step = (d: 1 | -1) => setTurno(stepShift(fecha, t, d));
+  const step = (d: 1 | -1) => {
+    if (!dia) return setTurno(stepShift(fecha, t, d));
+    const [y, mo, da] = fecha.split('-').map(Number), dt = new Date(y, mo - 1, da);
+    dt.setDate(dt.getDate() + d);
+    setTurno({ fecha: ymd(dt), turno: t });
+  };
 
   return (
     <section className="sec">
       <h2>Reporte de turno</h2>
       <div className="row" style={{ marginBottom: 14 }}>
-        <button className="btn" onClick={() => step(-1)} aria-label="Turno anterior">‹</button>
+        <button className="btn" onClick={() => step(-1)} aria-label={dia ? 'Día anterior' : 'Turno anterior'}>‹</button>
         <label className="f" style={{ width: 150 }}><input type="date" value={fecha} onChange={(e) => e.target.value && setTurno({ fecha: e.target.value, turno: t })} /></label>
-        <div className="chips">{([1, 2] as const).map((k) => <button key={k} aria-pressed={t === k} onClick={() => setTurno({ fecha, turno: k })}>Turno {k}{k === 1 ? ' · día' : ' · noche'}</button>)}</div>
-        <button className="btn" onClick={() => step(1)} aria-label="Turno siguiente">›</button>
+        <div className="chips">{([1, 2] as const).map((k) => <button key={k} aria-pressed={!dia && t === k} onClick={() => { setDia(false); setTurno({ fecha, turno: k }); }}>Turno {k}{k === 1 ? ' · día' : ' · noche'}</button>)}<button aria-pressed={dia} onClick={() => setDia(true)}>Día completo</button></div>
+        <button className="btn" onClick={() => step(1)} aria-label={dia ? 'Día siguiente' : 'Turno siguiente'}>›</button>
         <span className="mut">{rep} de {activas.length} máquinas con reporte</span>
       </div>
       <div className="tiles" style={{ marginBottom: 18 }}>
         <Tile l="Debían producir" v={s.exp ? fmt(s.exp) + ' kg' : '—'} e="según golpes, medida y calibre" />
-        <Tile l="Reportaron" v={fmt(s.kg) + ' kg'} e="suma del turno" />
+        <Tile l="Reportaron" v={fmt(s.kg) + ' kg'} e={dia ? 'suma del día' : 'suma del turno'} />
         <Tile l="Cumplimiento" v={pctTxt(s.pct)} e={s.pct == null ? 'sin teórico' : gapTxt(s.pct)} c={cls(s.pct, cfg) === 'bad' ? 'alert' : ''} />
         <Tile l="Diferencia" v={s.exp ? fmt(s.kgE - s.exp) + ' kg' : '—'} e={s.falta ? 'dejaron de producir' + money(s.falta) : ''} />
       </div>
@@ -48,17 +54,18 @@ export default function Turno() {
             <h3 style={{ margin: '16px 0 8px' }}>{AREAS[tipo]}</h3>
             <div className="grid">
               {lm.map((m) => {
-                const mine = ls.filter((x) => x.maquina_id === m.id), ms = sumL(mine), ph = paroH(S.paros, m.id, fecha, t, cfg);
+                const mine = ls.filter((x) => x.maquina_id === m.id), ms = sumL(mine), ph = dia ? paroH(S.paros, m.id, fecha, 1, cfg) + paroH(S.paros, m.id, fecha, 2, cfg) : paroH(S.paros, m.id, fecha, t, cfg);
+                const Tag = dia ? 'div' : 'button';
                 return (
-                  <button key={m.id} className={`card mach ${mine.length || incs.has(m.id) ? '' : 'vacio'}`} onClick={() => setCap(m.id)}>
+                  <Tag key={m.id} className={`card mach ${mine.length || incs.has(m.id) ? '' : 'vacio'}`} {...(dia ? {} : { onClick: () => setCap(m.id) })}>
                     <div className="nm"><b>{m.nombre}</b>{mine.length ? <Pill c={cls(ms.pct, cfg)}>{pctTxt(ms.pct)}</Pill> : incs.has(m.id) ? <Pill c="warn">{incs.get(m.id) === 'sin_operador' ? 'Faltó operador' : 'No trabajó'}</Pill> : <Pill>Sin reporte</Pill>}</div>
-                    {mine.map((x) => <div className="ln" key={x.id}><span>{x.cliente || '—'} <span className="mut">{lineMed(x)}</span></span><span className="mut">{x.operario}</span></div>)}
+                    {mine.map((x) => <div className="ln" key={x.id}><span>{dia && <b>T{x.turno} </b>}{x.cliente || '—'} <span className="mut">{lineMed(x)}</span></span><span className="mut">{x.operario}</span></div>)}
                     {mine.length ? (<>
                       <div className="row" style={{ justifyContent: 'space-between' }}><span className="mono">{fmt(ms.kg)} kg</span><span className="mut">{ms.exp ? 'de ' + fmt(ms.exp) : 'sin teórico'}</span></div>
                       <Bar p={ms.pct || 0} c={cls(ms.pct, cfg)} />
-                    </>) : incs.has(m.id) ? <span className="mut">No cuenta en las estadísticas</span> : <span className="mut">Toca para capturar el reporte</span>}
+                    </>) : incs.has(m.id) ? <span className="mut">No cuenta en las estadísticas</span> : <span className="mut">{dia ? 'Sin reporte este día' : 'Toca para capturar el reporte'}</span>}
                     {ph > 0 && <span className="pill warn" style={{ alignSelf: 'flex-start' }}>paro {fmt(ph, 1)} h</span>}
-                  </button>
+                  </Tag>
                 );
               })}
             </div>
@@ -67,7 +74,7 @@ export default function Turno() {
       })}
       {cap && <Captura maqId={cap} onClose={() => setCap(null)} />}
       {!canProd && <p className="mut" style={{ marginTop: 14 }}>Tu rol no permite capturar reportes.</p>}
-      <p className="mut" style={{ marginTop: 14 }}>{shiftName(fecha, t)}</p>
+      <p className="mut" style={{ marginTop: 14 }}>{dia ? 'Día completo (turno 1 + turno 2). Elige un turno para capturar o editar.' : shiftName(fecha, t)}</p>
     </section>
   );
 }
