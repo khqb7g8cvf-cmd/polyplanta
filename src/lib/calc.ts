@@ -5,7 +5,7 @@ export const CAUSAS = ['Mecánico', 'Eléctrico', 'Falta de material', 'Cambio d
 export const SELLOS: [string, string][] = [['fondo', 'Fondo'], ['lateral', 'Lateral'], ['camiseta', 'Camiseta'], ['pouch', 'Pouch con zipper'], ['ninguno', 'Sin bolseo (solo rollo)']];
 
 export const DEF_CFG: Cfg = {
-  horasProd: 10, horasSab: 6, turno1Inicio: 7, umbralBajo: 75, umbralOk: 85, minCambio: 20, nAviso: 3, umbralRec: 105, ventanaDias: 30,
+  horasProd: 10, horasSab: 6, calibreGrueso: 550, factorGrueso: 0.75, largoLargo: 100, factorLargo: 0.8, turno1Inicio: 7, umbralBajo: 75, umbralOk: 85, minCambio: 20, nAviso: 3, umbralRec: 105, ventanaDias: 30,
   nEscrita: 3, nActa: 5, nReconoc: 5, margenKg: null, excusadas: ['Mecánico', 'Eléctrico', 'Falta de material'],
 };
 
@@ -32,15 +32,16 @@ export function lineKgh(l: Pick<LineaRow, 'ancho' | 'largo' | 'calibre' | 'densi
  *  Regla base (prior): calibre ≥ 550 → ×0.75; largo ≥ 100 cm → ×0.80. Se aplica sobre los kg/h ya topados por la máquina.
  *  Aprendizaje: si ESA máquina, con ese tipo de bolsa, demuestra en el historial (≥ 3 reportes en 60 días) que rinde más, el factor sube
  *  hasta el percentil 75 de lo que ha logrado (máx 1). Nunca baja de la regla, así que no se "aprende" a exigir menos por pereza. */
-export const FACTOR_CALIBRE = 0.75, FACTOR_LARGO = 0.8, MIN_MUESTRAS = 3, VENTANA_APRENDE = 60;
-export const reglaBolseo = (l: Pick<LineaRow, 'largo' | 'calibre'>) => (Number(l.calibre) >= 550 ? FACTOR_CALIBRE : 1) * (Number(l.largo) >= 100 ? FACTOR_LARGO : 1);
-export const grupoBolseo = (l: Pick<LineaRow, 'largo' | 'calibre'>) => `${Number(l.calibre) >= 550 ? 'grueso' : 'normal'}|${Number(l.largo) >= 100 ? 'largo' : 'corto'}`;
+export const MIN_MUESTRAS = 3, VENTANA_APRENDE = 60;
+type Reg = Pick<Cfg, 'calibreGrueso' | 'factorGrueso' | 'largoLargo' | 'factorLargo'>;
+export const reglaBolseo = (l: Pick<LineaRow, 'largo' | 'calibre'>, cfg: Reg = DEF_CFG) => (Number(l.calibre) >= cfg.calibreGrueso ? cfg.factorGrueso : 1) * (Number(l.largo) >= cfg.largoLargo ? cfg.factorLargo : 1);
+export const grupoBolseo = (l: Pick<LineaRow, 'largo' | 'calibre'>, cfg: Reg = DEF_CFG) => `${Number(l.calibre) >= cfg.calibreGrueso ? 'grueso' : 'normal'}|${Number(l.largo) >= cfg.largoLargo ? 'largo' : 'corto'}`;
 export type FactorIdx = Map<string, { id: string; fecha: string; pct: number }[]>;
-export function factorBolseo(l: Pick<LineaRow, 'largo' | 'calibre'> & { id?: string }, maqId: string, idx: FactorIdx, now = Date.now()): { f: number; aprendido: boolean } {
-  const r = reglaBolseo(l);
+export function factorBolseo(l: Pick<LineaRow, 'largo' | 'calibre'> & { id?: string }, maqId: string, idx: FactorIdx, cfg: Reg, now = Date.now()): { f: number; aprendido: boolean } {
+  const r = reglaBolseo(l, cfg);
   if (r >= 1) return { f: 1, aprendido: false };
   const desde = ymd(new Date(now - VENTANA_APRENDE * 864e5));
-  const v = (idx.get(`${maqId}|${grupoBolseo(l)}`) || []).filter((x) => x.id !== l.id && x.fecha >= desde).map((x) => x.pct).sort((a, b) => a - b);
+  const v = (idx.get(`${maqId}|${grupoBolseo(l, cfg)}`) || []).filter((x) => x.id !== l.id && x.fecha >= desde).map((x) => x.pct).sort((a, b) => a - b);
   if (v.length < MIN_MUESTRAS) return { f: r, aprendido: false };
   const p75 = v[Math.floor((v.length - 1) * 0.75)], f = Math.min(1, Math.max(r, p75));
   return { f, aprendido: f > r };
@@ -130,8 +131,8 @@ export function indiceFactores(reportes: Reporte[], maquinas: Maquina[], paros: 
       const ks = ls.map((l) => lineKgh(l, m)), ev = evalMaquinaTurno(ls, ks, paroH(paros, mid, rep.fecha, rep.turno, cfg, exc, now), horasTurno(rep.fecha, rep.turno, cfg), ordenes, prod, cfg.minCambio);
       ls.forEach((l, i) => {
         const kg = Number(l.kilos) || 0, e = ev[i].exp;
-        if (reglaBolseo(l) >= 1 || !e || !kg) return;
-        const k = `${mid}|${grupoBolseo(l)}`;
+        if (reglaBolseo(l, cfg) >= 1 || !e || !kg) return;
+        const k = `${mid}|${grupoBolseo(l, cfg)}`;
         idx.set(k, [...(idx.get(k) || []), { id: l.id, fecha: rep.fecha, pct: kg / e }]);
       });
     }
@@ -149,7 +150,7 @@ export function buildLineas(reportes: Reporte[], maquinas: Maquina[], paros: Par
     for (const l of rep.reporte_lineas || []) if (!l.incidencia) byM.set(l.maquina_id, [...(byM.get(l.maquina_id) || []), l]);
     for (const [mid, ls] of byM) {
       const H = horasTurno(rep.fecha, rep.turno, cfg), m = mById.get(mid), excH = paroH(paros, mid, rep.fecha, rep.turno, cfg, exc, now), heff = Math.max(0, H - excH);
-      const facs = ls.map((l) => (m?.tipo === 'bolseo' ? factorBolseo(l, mid, idx, now) : { f: 1, aprendido: false })), ks = ls.map((l, i) => { const k = lineKgh(l, m); return k ? k * facs[i].f : k; });
+      const facs = ls.map((l) => (m?.tipo === 'bolseo' ? factorBolseo(l, mid, idx, cfg, now) : { f: 1, aprendido: false })), ks = ls.map((l, i) => { const k = lineKgh(l, m); return k ? k * facs[i].f : k; });
       const ev = evalMaquinaTurno(ls, ks, excH, H, ordenes, prod, cfg.minCambio), tot = ls.reduce((a, x) => a + (Number(x.horas) || 0), 0);
       ls.forEach((l, i) => {
         const kgh = ks[i], kilos = Number(l.kilos) || 0, { exp, expRaw, cerrada } = ev[i], share = tot > 0 && (Number(l.horas) || 0) > 0 ? (Number(l.horas) || 0) / tot : 1 / ls.length;

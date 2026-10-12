@@ -100,6 +100,7 @@ function CfgForm({ onClose }: { onClose: () => void }) {
   const p = (k: Partial<Cfg>) => setC((s) => ({ ...s, ...k }));
   async function save() {
     if (!c.horasProd || c.horasProd < 1 || c.horasProd > 12) return toast('Las horas productivas van de 1 a 12.', true);
+    if (c.factorGrueso < 0.3 || c.factorGrueso > 1 || c.factorLargo < 0.3 || c.factorLargo > 1) return toast('Los ajustes de bolseo van de 0.3 a 1.', true);
     if (!c.umbralBajo || c.umbralBajo > 100 || !c.ventanaDias) return toast('Revisa el umbral y la ventana de días.', true);
     if (c.umbralOk < c.umbralBajo) return toast('El verde debe empezar en un % igual o mayor al de amonestación.', true);
     if (await run(db.from('config').upsert({ id: 1, data: c }), 'Parámetros guardados')) onClose();
@@ -107,7 +108,7 @@ function CfgForm({ onClose }: { onClose: () => void }) {
   return (
     <Modal title="Parámetros y reglas" onClose={onClose} foot={<><button className="btn" onClick={onClose}>Cancelar</button><button className="btn primary" disabled={!isDueno} onClick={save}>Guardar</button></>}>
       <fieldset><legend>Turnos y meta</legend>
-        <div className="fg"><NumF l="Horas productivas por turno" v={c.horasProd} on={(v) => p({ horasProd: v ?? 10 })} /><NumF l="Horas productivas en sábado (7 a 3)" v={c.horasSab} on={(v) => p({ horasSab: v ?? 6 })} /><NumF l="Hora en que inicia el turno 1" v={c.turno1Inicio} on={(v) => p({ turno1Inicio: v ?? 7 })} /><NumF l="Minutos que se perdonan por cada cambio de orden" v={c.minCambio} on={(v) => p({ minCambio: v ?? 20 })} /><NumF l="Margen por kg (MXN, opcional)" v={c.margenKg} on={(v) => p({ margenKg: v })} /></div>
+        <div className="fg"><NumF l="Horas productivas por turno" v={c.horasProd} on={(v) => p({ horasProd: v ?? 10 })} /><NumF l="Bolseo: calibre desde el que la bolsa es gruesa" v={c.calibreGrueso} on={(v) => p({ calibreGrueso: v ?? 550 })} /><NumF l="Bolseo: ajuste a la meta si es gruesa (0.75 = 75%)" v={c.factorGrueso} on={(v) => p({ factorGrueso: v ?? 0.75 })} /><NumF l="Bolseo: largo (cm) desde el que la bolsa es larga" v={c.largoLargo} on={(v) => p({ largoLargo: v ?? 100 })} /><NumF l="Bolseo: ajuste a la meta si es larga (0.8 = 80%)" v={c.factorLargo} on={(v) => p({ factorLargo: v ?? 0.8 })} /><NumF l="Horas productivas en sábado (7 a 3)" v={c.horasSab} on={(v) => p({ horasSab: v ?? 6 })} /><NumF l="Hora en que inicia el turno 1" v={c.turno1Inicio} on={(v) => p({ turno1Inicio: v ?? 7 })} /><NumF l="Minutos que se perdonan por cada cambio de orden" v={c.minCambio} on={(v) => p({ minCambio: v ?? 20 })} /><NumF l="Margen por kg (MXN, opcional)" v={c.margenKg} on={(v) => p({ margenKg: v })} /></div>
         <p className="mut" style={{ margin: '10px 0 6px' }}>Paros que se descuentan de la meta del turno (no es culpa del operador):</p>
         <div className="row">{CAUSAS.map((x) => <ChkF key={x} l={x} v={c.excusadas.includes(x)} on={(on) => p({ excusadas: on ? [...c.excusadas, x] : c.excusadas.filter((y) => y !== x) })} />)}</div></fieldset>
       <fieldset><legend>Reglas de amonestación</legend>
