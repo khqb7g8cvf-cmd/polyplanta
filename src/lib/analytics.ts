@@ -1,4 +1,4 @@
-import { paroH } from './calc.ts';
+import { horasTurno, paroH } from './calc.ts';
 import type { Cfg, LineaCalc, Maquina, Paro, Tipo } from './types';
 
 export interface Agg { kg: number; kgE: number; exp: number; expRaw: number; pct: number | null; lines: number }
@@ -27,10 +27,10 @@ export function porMaquina(ls: LineaCalc[], maquinas: Maquina[], paros: Paro[], 
     const mine = ls.filter((x) => x.maquina_id === m.id);
     const a = agg(mine);
     const slots = new Map<string, true>();
-    for (const x of mine) slots.set(`${x.fecha}|${x.turno}`, true);
+    let sched = 0;
+    for (const x of mine) { const k = `${x.fecha}|${x.turno}`; if (!slots.has(k)) sched += horasTurno(x.fecha, cfg); slots.set(k, true); }
     let ph = 0;
     for (const k of slots.keys()) { const [f, t] = k.split('|'); ph += paroH(paros, m.id, f, Number(t), cfg, undefined, now); }
-    const sched = slots.size * (cfg.horasProd || 10);
     const serie = dias.map((d) => agg(mine.filter((x) => x.fecha === d)).pct);
     const vals = serie.filter((v): v is number => v != null);
     return { m, kg: a.kg, exp: a.exp, pct: a.pct, turnos: slots.size, paroH: ph, disp: sched ? Math.max(0, 1 - ph / sched) : null, serie, mejor: vals.length ? Math.max(...vals) : null };

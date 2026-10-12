@@ -5,7 +5,7 @@ export const CAUSAS = ['Mecánico', 'Eléctrico', 'Falta de material', 'Cambio d
 export const SELLOS: [string, string][] = [['fondo', 'Fondo'], ['lateral', 'Lateral'], ['camiseta', 'Camiseta'], ['pouch', 'Pouch con zipper'], ['ninguno', 'Sin bolseo (solo rollo)']];
 
 export const DEF_CFG: Cfg = {
-  horasProd: 10, turno1Inicio: 7, umbralBajo: 75, umbralOk: 85, minCambio: 20, nAviso: 3, umbralRec: 105, ventanaDias: 30,
+  horasProd: 10, horasSab: 7, turno1Inicio: 7, umbralBajo: 75, umbralOk: 85, minCambio: 20, nAviso: 3, umbralRec: 105, ventanaDias: 30,
   nEscrita: 3, nActa: 5, nReconoc: 5, margenKg: null, excusadas: ['Mecánico', 'Eléctrico', 'Falta de material'],
 };
 
@@ -39,11 +39,15 @@ export function kghOrden(o: Orden, m?: Maquina): number | null {
   return m.kgh || null;
 }
 
-/** Ventana de 12 h de un turno. */
+export const esSabado = (fecha: string) => { const [y, mo, d] = fecha.split('-').map(Number); return new Date(y, mo - 1, d).getDay() === 6; };
+/** Horas productivas de un turno: los sábados solo se trabaja de 7 a 3 (cfg.horasSab). */
+export const horasTurno = (fecha: string, cfg: Cfg) => (esSabado(fecha) ? cfg.horasSab || 7 : cfg.horasProd || 10);
+
+/** Ventana de un turno: 12 h entre semana; sábado solo turno 1 de 7 a 3 (8 h). */
 export function shiftWin(fecha: string, turno: number, cfg: Cfg): [Date, Date] {
   const [y, mo, d] = fecha.split('-').map(Number), h0 = cfg.turno1Inicio || 7;
   const a = new Date(y, mo - 1, d, turno === 1 ? h0 : h0 + 12, 0, 0);
-  return [a, new Date(a.getTime() + 12 * 36e5)];
+  return [a, new Date(a.getTime() + (esSabado(fecha) ? 8 : 12) * 36e5)];
 }
 
 /** Horas de paro de una máquina dentro de un turno (opcionalmente solo ciertas causas). */
@@ -91,13 +95,13 @@ export const producidoPorOrden = (reportes: Reporte[]) => {
 /** Calcula, por línea de reporte, lo que debía producirse (ya descontados paros justificados). */
 export function buildLineas(reportes: Reporte[], maquinas: Maquina[], paros: Paro[], cfg: Cfg, now = Date.now(), ordenes: Pick<Orden, 'id' | 'kilos'>[] = []): LineaCalc[] {
   const prod = producidoPorOrden(reportes);
-  const out: LineaCalc[] = [], exc = new Set(cfg.excusadas || []), H = cfg.horasProd || 10;
+  const out: LineaCalc[] = [], exc = new Set(cfg.excusadas || []);
   const mById = new Map(maquinas.map((m) => [m.id, m]));
   for (const rep of reportes) {
     const byM = new Map<string, LineaRow[]>();
     for (const l of rep.reporte_lineas || []) if (!l.incidencia) byM.set(l.maquina_id, [...(byM.get(l.maquina_id) || []), l]);
     for (const [mid, ls] of byM) {
-      const m = mById.get(mid), excH = paroH(paros, mid, rep.fecha, rep.turno, cfg, exc, now), heff = Math.max(0, H - excH);
+      const H = horasTurno(rep.fecha, cfg), m = mById.get(mid), excH = paroH(paros, mid, rep.fecha, rep.turno, cfg, exc, now), heff = Math.max(0, H - excH);
       const ks = ls.map((l) => lineKgh(l, m)), ev = evalMaquinaTurno(ls, ks, excH, H, ordenes, prod, cfg.minCambio), tot = ls.reduce((a, x) => a + (Number(x.horas) || 0), 0);
       ls.forEach((l, i) => {
         const kgh = ks[i], kilos = Number(l.kilos) || 0, { exp, expRaw, cerrada } = ev[i], share = tot > 0 && (Number(l.horas) || 0) > 0 ? (Number(l.horas) || 0) / tot : 1 / ls.length;

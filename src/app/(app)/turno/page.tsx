@@ -1,7 +1,7 @@
 'use client';
 import { useMemo, useState } from 'react';
 import { useData } from '@/lib/data';
-import { AREAS, cls, gapTxt, evalMaquinaTurno, kgMillar, lineKgh, producidoPorOrden, paroH, pctTxt, shiftWin, stepShift, sumL } from '@/lib/calc';
+import { AREAS, cls, gapTxt, evalMaquinaTurno, horasTurno, kgMillar, lineKgh, producidoPorOrden, paroH, pctTxt, shiftWin, stepShift, sumL } from '@/lib/calc';
 import { fmt, hhmm, ymd } from '@/lib/format';
 import { Bar, ChkF, DateF, Modal, NumF, Pill, SelF, Tile, TxtF, Fld } from '@/components/ui';
 import { lineMed, shiftName, useMoney } from '@/components/shared';
@@ -103,7 +103,7 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
   for (const l of saved0) if (l.orden_id) prod.set(l.orden_id, (prod.get(l.orden_id) || 0) - (Number(l.kilos) || 0));
   for (const l of lines) if (l.orden_id && !l.incidencia) prod.set(l.orden_id, (prod.get(l.orden_id) || 0) + (Number(l.kilos) || 0));
   const he_all = lines.length > 1 && lines.every((l) => Number(l.horas) > 0);
-  const n = lines.length, hs = lines.map((l) => Number(l.horas) || 0), ev = evalMaquinaTurno(lines, lines.map((l) => lineKgh(l, m)), excH, cfg.horasProd || 10, S.ordenes, prod, cfg.minCambio);
+  const n = lines.length, hs = lines.map((l) => Number(l.horas) || 0), ev = evalMaquinaTurno(lines, lines.map((l) => lineKgh(l, m)), excH, horasTurno(fecha, cfg), S.ordenes, prod, cfg.minCambio);
 
   const saved = (rep?.reporte_lineas || []).filter((l) => l.maquina_id === m.id);
   const [pedir, setPedir] = useState(false), nowT = Date.now();
