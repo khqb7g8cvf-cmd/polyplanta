@@ -1,7 +1,7 @@
 'use client';
 import { useMemo, useState } from 'react';
 import { useData } from '@/lib/data';
-import { AREAS, cls, gapTxt, evalMaquinaTurno, horasTurno, kgMillar, lineKgh, producidoPorOrden, paroH, pctTxt, shiftWin, stepShift, sumL } from '@/lib/calc';
+import { AREAS, cls, gapTxt, evalMaquinaTurno, horasTurno, kgMillar, operaEnTurno, lineKgh, producidoPorOrden, paroH, pctTxt, shiftWin, stepShift, sumL } from '@/lib/calc';
 import { fmt, hhmm, ymd } from '@/lib/format';
 import { Bar, ChkF, DateF, Modal, NumF, Pill, SelF, Tile, TxtF, Fld } from '@/components/ui';
 import { lineMed, shiftName, useMoney } from '@/components/shared';
@@ -22,7 +22,10 @@ export default function Turno() {
   const s = sumL(ls), activas = maqs().filter((m) => (m.estado || 'Activa') === 'Activa');
   const incs = new Map<string, string>();
   for (const r of S.reportes.filter((r) => r.fecha === fecha && (dia || r.turno === t))) for (const l of r.reporte_lineas || []) if (l.incidencia) incs.set(l.maquina_id, l.incidencia);
-  const rep = activas.filter((m) => ls.some((x) => x.maquina_id === m.id) || incs.has(m.id)).length;
+  const tiene = (id: string) => ls.some((x) => x.maquina_id === id) || incs.has(id);
+  const esperaTurno = (m: Maquina) => dia ? operaEnTurno(m.tipo, fecha, 1) || operaEnTurno(m.tipo, fecha, 2) : operaEnTurno(m.tipo, fecha, t);
+  const esperadas = activas.filter((m) => esperaTurno(m) || tiene(m.id));
+  const rep = esperadas.filter((m) => tiene(m.id)).length;
   const step = (d: 1 | -1) => {
     if (!dia) return setTurno(stepShift(fecha, t, d));
     const [y, mo, da] = fecha.split('-').map(Number), dt = new Date(y, mo - 1, da);
@@ -38,7 +41,7 @@ export default function Turno() {
         <label className="f" style={{ width: 150 }}><input type="date" value={fecha} onChange={(e) => e.target.value && setTurno({ fecha: e.target.value, turno: t })} /></label>
         <div className="chips">{([1, 2] as const).map((k) => <button key={k} aria-pressed={!dia && t === k} onClick={() => { setDia(false); setTurno({ fecha, turno: k }); }}>Turno {k}{k === 1 ? ' · día' : ' · noche'}</button>)}<button aria-pressed={dia} onClick={() => setDia(true)}>Día completo</button></div>
         <button className="btn" onClick={() => step(1)} aria-label={dia ? 'Día siguiente' : 'Turno siguiente'}>›</button>
-        <span className="mut">{rep} de {activas.length} máquinas con reporte</span>
+        <span className="mut">{rep} de {esperadas.length} máquinas con reporte</span>
       </div>
       <div className="tiles" style={{ marginBottom: 18 }}>
         <Tile l="Debían producir" v={s.exp ? fmt(s.exp) + ' kg' : '—'} e="según golpes, medida y calibre" />
@@ -58,12 +61,12 @@ export default function Turno() {
                 const Tag = dia ? 'div' : 'button';
                 return (
                   <Tag key={m.id} className={`card mach ${mine.length || incs.has(m.id) ? '' : 'vacio'}`} {...(dia ? {} : { onClick: () => setCap(m.id) })}>
-                    <div className="nm"><b>{m.nombre}</b>{mine.length ? <Pill c={cls(ms.pct, cfg)}>{pctTxt(ms.pct)}</Pill> : incs.has(m.id) ? <Pill c="warn">{incs.get(m.id) === 'sin_operador' ? 'Faltó operador' : 'No trabajó'}</Pill> : <Pill>Sin reporte</Pill>}</div>
+                    <div className="nm"><b>{m.nombre}</b>{mine.length ? <Pill c={cls(ms.pct, cfg)}>{pctTxt(ms.pct)}</Pill> : incs.has(m.id) ? <Pill c="warn">{incs.get(m.id) === 'sin_operador' ? 'Faltó operador' : 'No trabajó'}</Pill> : <Pill>{esperaTurno(m) ? 'Sin reporte' : 'No opera'}</Pill>}</div>
                     {mine.map((x) => <div className="ln" key={x.id}><span>{dia && <b>T{x.turno} </b>}{x.cliente || '—'} <span className="mut">{lineMed(x)}</span></span><span className="mut">{x.operario}</span></div>)}
                     {mine.length ? (<>
                       <div className="row" style={{ justifyContent: 'space-between' }}><span className="mono">{fmt(ms.kg)} kg</span><span className="mut">{ms.exp ? 'de ' + fmt(ms.exp) : 'sin teórico'}</span></div>
                       <Bar p={ms.pct || 0} c={cls(ms.pct, cfg)} />
-                    </>) : incs.has(m.id) ? <span className="mut">No cuenta en las estadísticas</span> : <span className="mut">{dia ? 'Sin reporte este día' : 'Toca para capturar el reporte'}</span>}
+                    </>) : incs.has(m.id) ? <span className="mut">No cuenta en las estadísticas</span> : <span className="mut">{!esperaTurno(m) ? 'No se espera este turno (solo si trabajó, captura)' : dia ? 'Sin reporte este día' : 'Toca para capturar el reporte'}</span>}
                     {ph > 0 && <span className="pill warn" style={{ alignSelf: 'flex-start' }}>paro {fmt(ph, 1)} h</span>}
                   </Tag>
                 );
@@ -103,7 +106,7 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
   for (const l of saved0) if (l.orden_id) prod.set(l.orden_id, (prod.get(l.orden_id) || 0) - (Number(l.kilos) || 0));
   for (const l of lines) if (l.orden_id && !l.incidencia) prod.set(l.orden_id, (prod.get(l.orden_id) || 0) + (Number(l.kilos) || 0));
   const he_all = lines.length > 1 && lines.every((l) => Number(l.horas) > 0);
-  const n = lines.length, hs = lines.map((l) => Number(l.horas) || 0), ev = evalMaquinaTurno(lines, lines.map((l) => lineKgh(l, m)), excH, horasTurno(fecha, cfg), S.ordenes, prod, cfg.minCambio);
+  const n = lines.length, hs = lines.map((l) => Number(l.horas) || 0), ev = evalMaquinaTurno(lines, lines.map((l) => lineKgh(l, m)), excH, horasTurno(fecha, t, cfg), S.ordenes, prod, cfg.minCambio);
 
   const saved = (rep?.reporte_lineas || []).filter((l) => l.maquina_id === m.id);
   const [pedir, setPedir] = useState(false), nowT = Date.now();

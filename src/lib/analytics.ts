@@ -28,7 +28,7 @@ export function porMaquina(ls: LineaCalc[], maquinas: Maquina[], paros: Paro[], 
     const a = agg(mine);
     const slots = new Map<string, true>();
     let sched = 0;
-    for (const x of mine) { const k = `${x.fecha}|${x.turno}`; if (!slots.has(k)) sched += horasTurno(x.fecha, cfg); slots.set(k, true); }
+    for (const x of mine) { const k = `${x.fecha}|${x.turno}`; if (!slots.has(k)) sched += horasTurno(x.fecha, x.turno, cfg); slots.set(k, true); }
     let ph = 0;
     for (const k of slots.keys()) { const [f, t] = k.split('|'); ph += paroH(paros, m.id, f, Number(t), cfg, undefined, now); }
     const serie = dias.map((d) => agg(mine.filter((x) => x.fecha === d)).pct);

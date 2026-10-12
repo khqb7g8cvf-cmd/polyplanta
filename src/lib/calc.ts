@@ -39,15 +39,23 @@ export function kghOrden(o: Orden, m?: Maquina): number | null {
   return m.kgh || null;
 }
 
-export const esSabado = (fecha: string) => { const [y, mo, d] = fecha.split('-').map(Number); return new Date(y, mo - 1, d).getDay() === 6; };
-/** Horas productivas de un turno: los sábados solo se trabaja de 7 a 3 (cfg.horasSab). */
-export const horasTurno = (fecha: string, cfg: Cfg) => (esSabado(fecha) ? cfg.horasSab || 6 : cfg.horasProd || 10);
+export const diaSemana = (fecha: string) => { const [y, mo, d] = fecha.split('-').map(Number); return new Date(y, mo - 1, d).getDay(); }; // 0 dom … 6 sáb
+/** Sábado de día: solo se trabaja de 7 a 3 (el turno de noche del sábado sí es de 12 h para extrusión). */
+export const esSabadoCorto = (fecha: string, turno: number) => diaSemana(fecha) === 6 && turno === 1;
+/** Horas productivas de un turno (cfg.horasSab en sábado de día). */
+export const horasTurno = (fecha: string, turno: number, cfg: Cfg) => (esSabadoCorto(fecha, turno) ? cfg.horasSab || 6 : cfg.horasProd || 10);
+/** ¿Se espera que esta máquina opere ese turno? Sábado noche y domingo solo extrusión; lo demás es extraordinario. */
+export const operaEnTurno = (tipo: string | undefined, fecha: string, turno: number) => {
+  if (tipo === 'extrusion') return true;
+  const d = diaSemana(fecha);
+  return !(d === 0 || (d === 6 && turno === 2));
+};
 
 /** Ventana de un turno: 12 h entre semana; sábado solo turno 1 de 7 a 3 (8 h). */
 export function shiftWin(fecha: string, turno: number, cfg: Cfg): [Date, Date] {
   const [y, mo, d] = fecha.split('-').map(Number), h0 = cfg.turno1Inicio || 7;
   const a = new Date(y, mo - 1, d, turno === 1 ? h0 : h0 + 12, 0, 0);
-  return [a, new Date(a.getTime() + (esSabado(fecha) ? 8 : 12) * 36e5)];
+  return [a, new Date(a.getTime() + (esSabadoCorto(fecha, turno) ? 8 : 12) * 36e5)];
 }
 
 /** Horas de paro de una máquina dentro de un turno (opcionalmente solo ciertas causas). */
@@ -101,7 +109,7 @@ export function buildLineas(reportes: Reporte[], maquinas: Maquina[], paros: Par
     const byM = new Map<string, LineaRow[]>();
     for (const l of rep.reporte_lineas || []) if (!l.incidencia) byM.set(l.maquina_id, [...(byM.get(l.maquina_id) || []), l]);
     for (const [mid, ls] of byM) {
-      const H = horasTurno(rep.fecha, cfg), m = mById.get(mid), excH = paroH(paros, mid, rep.fecha, rep.turno, cfg, exc, now), heff = Math.max(0, H - excH);
+      const H = horasTurno(rep.fecha, rep.turno, cfg), m = mById.get(mid), excH = paroH(paros, mid, rep.fecha, rep.turno, cfg, exc, now), heff = Math.max(0, H - excH);
       const ks = ls.map((l) => lineKgh(l, m)), ev = evalMaquinaTurno(ls, ks, excH, H, ordenes, prod, cfg.minCambio), tot = ls.reduce((a, x) => a + (Number(x.horas) || 0), 0);
       ls.forEach((l, i) => {
         const kgh = ks[i], kilos = Number(l.kilos) || 0, { exp, expRaw, cerrada } = ev[i], share = tot > 0 && (Number(l.horas) || 0) > 0 ? (Number(l.horas) || 0) / tot : 1 / ls.length;
