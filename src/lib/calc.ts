@@ -5,7 +5,7 @@ export const CAUSAS = ['Mecánico', 'Eléctrico', 'Falta de material', 'Cambio d
 export const SELLOS: [string, string][] = [['fondo', 'Fondo'], ['lateral', 'Lateral'], ['camiseta', 'Camiseta'], ['pouch', 'Pouch con zipper'], ['ninguno', 'Sin bolseo (solo rollo)']];
 
 export const DEF_CFG: Cfg = {
-  horasProd: 10, horasSab: 7, turno1Inicio: 7, umbralBajo: 75, umbralOk: 85, minCambio: 20, nAviso: 3, umbralRec: 105, ventanaDias: 30,
+  horasProd: 10, horasSab: 6, turno1Inicio: 7, umbralBajo: 75, umbralOk: 85, minCambio: 20, nAviso: 3, umbralRec: 105, ventanaDias: 30,
   nEscrita: 3, nActa: 5, nReconoc: 5, margenKg: null, excusadas: ['Mecánico', 'Eléctrico', 'Falta de material'],
 };
 
@@ -41,7 +41,7 @@ export function kghOrden(o: Orden, m?: Maquina): number | null {
 
 export const esSabado = (fecha: string) => { const [y, mo, d] = fecha.split('-').map(Number); return new Date(y, mo - 1, d).getDay() === 6; };
 /** Horas productivas de un turno: los sábados solo se trabaja de 7 a 3 (cfg.horasSab). */
-export const horasTurno = (fecha: string, cfg: Cfg) => (esSabado(fecha) ? cfg.horasSab || 7 : cfg.horasProd || 10);
+export const horasTurno = (fecha: string, cfg: Cfg) => (esSabado(fecha) ? cfg.horasSab || 6 : cfg.horasProd || 10);
 
 /** Ventana de un turno: 12 h entre semana; sábado solo turno 1 de 7 a 3 (8 h). */
 export function shiftWin(fecha: string, turno: number, cfg: Cfg): [Date, Date] {
