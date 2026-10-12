@@ -58,8 +58,8 @@ export default function Inventario() {
                   <td style={{ whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>{canProd && <><button className="btn sm" onClick={() => setModo({ k: 'entrada', mat: r.m.id })}>Entrada</button>{' '}<button className="btn sm" onClick={() => setModo({ k: 'salida', mat: r.m.id })}>Salida</button>{' '}</>}{isDueno && <button className="btn sm" onClick={() => setModo({ k: 'material', m: r.m })}>Editar</button>}</td>
                 </tr>))}
             </tbody></table></Scroll>
-          ) : <Empty>Todavía no hay materiales. {isDueno ? 'Agrega el primero.' : 'El dueño debe darlos de alta.'}</Empty>}
-          {isDueno && <p style={{ marginTop: 10 }}><button className="btn sm" onClick={() => setModo({ k: 'material' })}>+ Nuevo material</button></p>}
+          ) : <Empty>Todavía no hay materiales. Agrega el primero.</Empty>}
+          {canProd && <p style={{ marginTop: 10 }}><button className="btn sm" onClick={() => setModo({ k: 'material' })}>+ Nuevo material</button></p>}
           <p className="mut" style={{ marginTop: 8, maxWidth: '80ch' }}>Toca un material para ver su ficha con gráficas e historial. La cobertura usa el consumo de los últimos 30 días (solo salidas capturadas).</p>
         </section>
       )}
