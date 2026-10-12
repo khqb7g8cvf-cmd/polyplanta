@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { kgMillar, lineKgh, buildLineas, buildOT, opAll, DEF_CFG, sumL } from '../src/lib/calc.ts';
+import { kgMillar, lineKgh, buildLineas, buildOT, opAll, DEF_CFG, sumL, reglaBolseo } from '../src/lib/calc.ts';
 import { resumenMateriales, conciliacion } from '../src/lib/inv.ts';
 import type { Maquina, Reporte, Paro, Amon, LineaRow, Material, Movimiento } from '../src/lib/types.ts';
 
@@ -162,4 +162,21 @@ test('bolseo: m.kgh es un tope real de la máquina', () => {
   const libre = lineKgh(l, maq({ id: 'b1' }))!, tope = lineKgh(l, maq({ id: 'b1', kgh: 200 }))!;
   assert.ok(Math.abs(libre - 386.4) < 0.5);
   assert.equal(tope, 200);
+});
+
+test('bolseo: bolsa gruesa y larga baja la meta (regla base) pero la chica no', () => {
+  assert.equal(reglaBolseo({ calibre: 200, largo: 50 }), 1);
+  assert.ok(Math.abs(reglaBolseo({ calibre: 650, largo: 135 }) - 0.6) < 1e-9);
+  const grande = linea({ ancho: 52, largo: 135, calibre: 650, golpes: 16, kilos: 610, horas_perdidas: 0.5 });
+  const l = buildLineas([rep('r1', '2026-10-09', 1, [grande])], [maq({ id: 'b1', kgh: 160 })], [], DEF_CFG, now);
+  assert.ok(Math.abs(l[0].exp! - 160 * 0.6 * 9.5) < 1);
+  assert.ok(l[0].pct! > 0.65 && l[0].pct! < 0.7);
+});
+
+test('bolseo: si la máquina demuestra que rinde más con esa bolsa, el ajuste sube (sin pasar de 1)', () => {
+  const g = (k: number) => linea({ ancho: 37, largo: 115, calibre: 800, golpes: 25, kilos: k });
+  const reps = [1, 2, 3, 4].map((d) => rep('r' + d, '2026-10-0' + d, 1, [g(1900)]));
+  const l = buildLineas(reps, [maq({ id: 'b1', kgh: 200 })], [], DEF_CFG, Date.parse('2026-10-07T12:00:00'));
+  assert.ok(l.every((x) => x.fac! > 0.6));
+  assert.ok(l.every((x) => x.fac! <= 1));
 });

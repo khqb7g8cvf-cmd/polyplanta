@@ -28,6 +28,24 @@ export function lineKgh(l: Pick<LineaRow, 'ancho' | 'largo' | 'calibre' | 'densi
   return l.kgh || m.kgh || null;
 }
 
+/** Realismo en bolseo: las bolsas gruesas o largas obligan a bajar velocidad (sellado, acomodar y empacar a mano).
+ *  Regla base (prior): calibre ≥ 550 → ×0.75; largo ≥ 100 cm → ×0.80. Se aplica sobre los kg/h ya topados por la máquina.
+ *  Aprendizaje: si ESA máquina, con ese tipo de bolsa, demuestra en el historial (≥ 3 reportes en 60 días) que rinde más, el factor sube
+ *  hasta el percentil 75 de lo que ha logrado (máx 1). Nunca baja de la regla, así que no se "aprende" a exigir menos por pereza. */
+export const FACTOR_CALIBRE = 0.75, FACTOR_LARGO = 0.8, MIN_MUESTRAS = 3, VENTANA_APRENDE = 60;
+export const reglaBolseo = (l: Pick<LineaRow, 'largo' | 'calibre'>) => (Number(l.calibre) >= 550 ? FACTOR_CALIBRE : 1) * (Number(l.largo) >= 100 ? FACTOR_LARGO : 1);
+export const grupoBolseo = (l: Pick<LineaRow, 'largo' | 'calibre'>) => `${Number(l.calibre) >= 550 ? 'grueso' : 'normal'}|${Number(l.largo) >= 100 ? 'largo' : 'corto'}`;
+export type FactorIdx = Map<string, { id: string; fecha: string; pct: number }[]>;
+export function factorBolseo(l: Pick<LineaRow, 'largo' | 'calibre'> & { id?: string }, maqId: string, idx: FactorIdx, now = Date.now()): { f: number; aprendido: boolean } {
+  const r = reglaBolseo(l);
+  if (r >= 1) return { f: 1, aprendido: false };
+  const desde = ymd(new Date(now - VENTANA_APRENDE * 864e5));
+  const v = (idx.get(`${maqId}|${grupoBolseo(l)}`) || []).filter((x) => x.id !== l.id && x.fecha >= desde).map((x) => x.pct).sort((a, b) => a - b);
+  if (v.length < MIN_MUESTRAS) return { f: r, aprendido: false };
+  const p75 = v[Math.floor((v.length - 1) * 0.75)], f = Math.min(1, Math.max(r, p75));
+  return { f, aprendido: f > r };
+}
+
 export function kghOrden(o: Orden, m?: Maquina): number | null {
   if (!m) return null;
   if (m.tipo === 'bolseo') {
@@ -100,9 +118,30 @@ export const producidoPorOrden = (reportes: Reporte[]) => {
   return g;
 };
 
+/** Primera pasada (sin ajuste): qué % logró cada línea de bolseo con bolsa gruesa/larga, para aprender qué rinde cada máquina. */
+export function indiceFactores(reportes: Reporte[], maquinas: Maquina[], paros: Paro[], cfg: Cfg, ordenes: Pick<Orden, 'id' | 'kilos'>[] = [], now = Date.now()): FactorIdx {
+  const idx: FactorIdx = new Map(), prod = producidoPorOrden(reportes), exc = new Set(cfg.excusadas || []), mById = new Map(maquinas.map((m) => [m.id, m]));
+  for (const rep of reportes) {
+    const byM = new Map<string, LineaRow[]>();
+    for (const l of rep.reporte_lineas || []) if (!l.incidencia) byM.set(l.maquina_id, [...(byM.get(l.maquina_id) || []), l]);
+    for (const [mid, ls] of byM) {
+      const m = mById.get(mid);
+      if (m?.tipo !== 'bolseo') continue;
+      const ks = ls.map((l) => lineKgh(l, m)), ev = evalMaquinaTurno(ls, ks, paroH(paros, mid, rep.fecha, rep.turno, cfg, exc, now), horasTurno(rep.fecha, rep.turno, cfg), ordenes, prod, cfg.minCambio);
+      ls.forEach((l, i) => {
+        const kg = Number(l.kilos) || 0, e = ev[i].exp;
+        if (reglaBolseo(l) >= 1 || !e || !kg) return;
+        const k = `${mid}|${grupoBolseo(l)}`;
+        idx.set(k, [...(idx.get(k) || []), { id: l.id, fecha: rep.fecha, pct: kg / e }]);
+      });
+    }
+  }
+  return idx;
+}
+
 /** Calcula, por línea de reporte, lo que debía producirse (ya descontados paros justificados). */
 export function buildLineas(reportes: Reporte[], maquinas: Maquina[], paros: Paro[], cfg: Cfg, now = Date.now(), ordenes: Pick<Orden, 'id' | 'kilos'>[] = []): LineaCalc[] {
-  const prod = producidoPorOrden(reportes);
+  const prod = producidoPorOrden(reportes), idx = indiceFactores(reportes, maquinas, paros, cfg, ordenes, now);
   const out: LineaCalc[] = [], exc = new Set(cfg.excusadas || []);
   const mById = new Map(maquinas.map((m) => [m.id, m]));
   for (const rep of reportes) {
@@ -110,10 +149,11 @@ export function buildLineas(reportes: Reporte[], maquinas: Maquina[], paros: Par
     for (const l of rep.reporte_lineas || []) if (!l.incidencia) byM.set(l.maquina_id, [...(byM.get(l.maquina_id) || []), l]);
     for (const [mid, ls] of byM) {
       const H = horasTurno(rep.fecha, rep.turno, cfg), m = mById.get(mid), excH = paroH(paros, mid, rep.fecha, rep.turno, cfg, exc, now), heff = Math.max(0, H - excH);
-      const ks = ls.map((l) => lineKgh(l, m)), ev = evalMaquinaTurno(ls, ks, excH, H, ordenes, prod, cfg.minCambio), tot = ls.reduce((a, x) => a + (Number(x.horas) || 0), 0);
+      const facs = ls.map((l) => (m?.tipo === 'bolseo' ? factorBolseo(l, mid, idx, now) : { f: 1, aprendido: false })), ks = ls.map((l, i) => { const k = lineKgh(l, m); return k ? k * facs[i].f : k; });
+      const ev = evalMaquinaTurno(ls, ks, excH, H, ordenes, prod, cfg.minCambio), tot = ls.reduce((a, x) => a + (Number(x.horas) || 0), 0);
       ls.forEach((l, i) => {
         const kgh = ks[i], kilos = Number(l.kilos) || 0, { exp, expRaw, cerrada } = ev[i], share = tot > 0 && (Number(l.horas) || 0) > 0 ? (Number(l.horas) || 0) / tot : 1 / ls.length;
-        out.push({ ...l, kilos, fecha: rep.fecha, turno: rep.turno, tipo: m?.tipo, kgh, exp, expRaw, excH: excH * share, pct: exp ? kilos / exp : null, pctRaw: expRaw ? kilos / expRaw : null, cerrada });
+        out.push({ ...l, kilos, fecha: rep.fecha, turno: rep.turno, tipo: m?.tipo, kgh, exp, expRaw, excH: excH * share, pct: exp ? kilos / exp : null, pctRaw: expRaw ? kilos / expRaw : null, cerrada, fac: facs[i].f });
       });
     }
   }

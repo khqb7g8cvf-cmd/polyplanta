@@ -53,6 +53,8 @@ export interface LineaCalc extends LineaRow {
   pct: number | null; pctRaw: number | null;
   /** Orden que ya se terminó (no es la última del turno, o ya se cumplió su cantidad): no se evalúa. */
   cerrada?: boolean;
+  /** Ajuste de realismo aplicado al kg/h (bolsa gruesa/larga en bolseo); 1 = sin ajuste. */
+  fac?: number;
 }
 export interface OpTurno {
   operario: string; fecha: string; turno: 1 | 2; rid: string; lines: LineaCalc[];

@@ -1,7 +1,7 @@
 'use client';
 import { useMemo, useState } from 'react';
 import { useData } from '@/lib/data';
-import { AREAS, cls, gapTxt, evalMaquinaTurno, horasTurno, kgMillar, operaEnTurno, lineKgh, producidoPorOrden, paroH, pctTxt, shiftWin, stepShift, sumL } from '@/lib/calc';
+import { AREAS, cls, gapTxt, evalMaquinaTurno, factorBolseo, horasTurno, indiceFactores, kgMillar, operaEnTurno, lineKgh, producidoPorOrden, paroH, pctTxt, shiftWin, stepShift, sumL } from '@/lib/calc';
 import { fmt, hhmm, ymd } from '@/lib/format';
 import { Bar, ChkF, DateF, Modal, NumF, Pill, SelF, Tile, TxtF, Fld } from '@/components/ui';
 import { lineMed, shiftName, useMoney } from '@/components/shared';
@@ -106,7 +106,9 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
   for (const l of saved0) if (l.orden_id) prod.set(l.orden_id, (prod.get(l.orden_id) || 0) - (Number(l.kilos) || 0));
   for (const l of lines) if (l.orden_id && !l.incidencia) prod.set(l.orden_id, (prod.get(l.orden_id) || 0) + (Number(l.kilos) || 0));
   const he_all = lines.length > 1 && lines.every((l) => Number(l.horas) > 0);
-  const n = lines.length, hs = lines.map((l) => Number(l.horas) || 0), ev = evalMaquinaTurno(lines, lines.map((l) => lineKgh(l, m)), excH, horasTurno(fecha, t, cfg), S.ordenes, prod, cfg.minCambio);
+  const idx = useMemo(() => indiceFactores(S.reportes, S.maquinas, S.paros, cfg, S.ordenes), [S.reportes, S.maquinas, S.paros, cfg, S.ordenes]);
+  const facs = lines.map((l) => (b ? factorBolseo(l, m.id, idx) : { f: 1, aprendido: false }));
+  const n = lines.length, hs = lines.map((l) => Number(l.horas) || 0), ev = evalMaquinaTurno(lines, lines.map((l, i) => { const k = lineKgh(l, m); return k ? k * facs[i].f : k; }), excH, horasTurno(fecha, t, cfg), S.ordenes, prod, cfg.minCambio);
 
   const saved = (rep?.reporte_lineas || []).filter((l) => l.maquina_id === m.id);
   const [pedir, setPedir] = useState(false), nowT = Date.now();
@@ -168,7 +170,7 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
           <p className="mut" style={{ marginTop: 10 }}>Este turno no cuenta en las estadísticas de la máquina ni del operador.</p>
         </fieldset>
       ) : lines.map((l, i) => {
-        const kgh = lineKgh(l, m), { tTeo, disp, exp, cerrada } = ev[i], pct = exp && l.kilos != null ? l.kilos / exp : null;
+        const kgh0 = lineKgh(l, m), kgh = kgh0 ? kgh0 * facs[i].f : kgh0, { tTeo, disp, exp, cerrada } = ev[i], pct = exp && l.kilos != null ? l.kilos / exp : null;
         const pickOrden = (id: string) => {
           const o = S.ordenes.find((x) => x.id === id);
           set(i, o ? { orden_id: id, cliente: o.cliente, ancho: (b ? o.bolsa_ancho : o.ancho_ext) ?? l.ancho, largo: o.bolsa_largo ?? l.largo, calibre: o.calibre ?? l.calibre, densidad: o.densidad || 'baja' } : { orden_id: null });
@@ -201,7 +203,7 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
             </div>
             <div className="calc" style={{ marginTop: 10 }}>
               {cerrada ? <span>✅ Última orden cumplida (<b>{fmt(l.kilos)} kg</b>): no se evalúa el resto del turno.</span>
-                : exp && tTeo != null && disp != null ? <><span>Debía tardar: <b>{fmt(tTeo, 1)} h</b></span><span>({fmt(l.kilos)} kg ÷ {fmt(kgh, 0)} kg/h{b ? <span className="mut"> = {fmt(l.golpes ?? m.golpes ?? 0)} golpes × {l.carriles ?? m.carriles ?? 1} carril(es) × {fmt(kgMillar(l.ancho, l.largo, l.calibre, l.densidad) ?? 0, 1)} kg/millar{m.kgh ? `, tope ${fmt(m.kgh)} kg/h` : ''}</span> : null})</span>
+                : exp && tTeo != null && disp != null ? <><span>Debía tardar: <b>{fmt(tTeo, 1)} h</b></span><span>({fmt(l.kilos)} kg ÷ {fmt(kgh, 0)} kg/h{b ? <span className="mut"> = {fmt(l.golpes ?? m.golpes ?? 0)} golpes × {l.carriles ?? m.carriles ?? 1} carril(es) × {fmt(kgMillar(l.ancho, l.largo, l.calibre, l.densidad) ?? 0, 1)} kg/millar{m.kgh ? `, tope ${fmt(m.kgh)} kg/h` : ''}{facs[i].f < 1 ? `, ajuste ×${fmt(facs[i].f, 2)} por bolsa ${Number(l.calibre) >= 550 ? 'gruesa' : ''}${Number(l.calibre) >= 550 && Number(l.largo) >= 100 ? ' y ' : ''}${Number(l.largo) >= 100 ? 'larga' : ''}${facs[i].aprendido ? ' (según lo que esta máquina ha logrado)' : ''}` : ''}</span> : null})</span>
                   <span>{he_all ? 'Tardó' : 'Disponible'}: <b>{fmt(disp, 1)} h</b>{n > 1 && cfg.minCambio > 0 ? <span className="mut"> (ya con {cfg.minCambio} min por cambio de orden)</span> : null}{Number(l.horas_perdidas) > 0 ? <span className="mut"> (menos {fmt(Number(l.horas_perdidas), 1)} h perdidas)</span> : null}</span>
                   {pct != null && <span className={cls(pct, cfg) === 'bad' ? 't-bad' : ''}>Cumplimiento: <b>{pctTxt(pct)}</b></span>}</>
                 : kgh ? <span className="mut">Captura los kilos para calcular cuánto debía tardar.</span>
