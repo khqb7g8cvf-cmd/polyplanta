@@ -166,10 +166,10 @@ test('bolseo: m.kgh es un tope real de la máquina', () => {
 
 test('bolseo: desde calibre 550 baja la meta; abajo de 550 manda la fórmula', () => {
   assert.equal(reglaBolseo({ calibre: 549, largo: 135 }), 1);
-  assert.ok(Math.abs(reglaBolseo({ calibre: 550, largo: 50 }) - 0.75 * 0.95) < 1e-9);
+  assert.ok(Math.abs(reglaBolseo({ calibre: 550, largo: 50 }) - 0.6) < 1e-9);
   const grande = linea({ ancho: 52, largo: 135, calibre: 650, golpes: 16, kilos: 610, horas_perdidas: 0.5 });
   const l = buildLineas([rep('r1', '2026-10-09', 1, [grande])], [maq({ id: 'b1', kgh: 160 })], [], DEF_CFG, now);
-  assert.ok(Math.abs(l[0].exp! - 160 * 0.75 * 0.95 * 9.5) < 1);
+  assert.ok(Math.abs(l[0].exp! - 160 * 0.6 * 9.5) < 1);
 });
 
 test('bolseo: si la máquina demuestra que rinde más con esa bolsa, el ajuste sube (sin pasar de 1)', () => {
