@@ -164,20 +164,18 @@ test('bolseo: m.kgh es un tope real de la máquina', () => {
   assert.equal(tope, 200);
 });
 
-test('bolseo: bolsa gruesa y larga baja la meta (regla base) pero la chica no', () => {
-  assert.equal(reglaBolseo({ calibre: 200, largo: 50 }), 1);
-  assert.ok(Math.abs(reglaBolseo({ calibre: 650, largo: 135 }) - 0.75 * 0.8 * 0.95) < 1e-9);
-  assert.ok(reglaBolseo({ calibre: 500, largo: 100 }) < 1 && reglaBolseo({ calibre: 500, largo: 100 }) > reglaBolseo({ calibre: 650, largo: 135 }));
+test('bolseo: desde calibre 550 baja la meta; abajo de 550 manda la fórmula', () => {
+  assert.equal(reglaBolseo({ calibre: 549, largo: 135 }), 1);
+  assert.ok(Math.abs(reglaBolseo({ calibre: 550, largo: 50 }) - 0.75 * 0.95) < 1e-9);
   const grande = linea({ ancho: 52, largo: 135, calibre: 650, golpes: 16, kilos: 610, horas_perdidas: 0.5 });
   const l = buildLineas([rep('r1', '2026-10-09', 1, [grande])], [maq({ id: 'b1', kgh: 160 })], [], DEF_CFG, now);
-  assert.ok(Math.abs(l[0].exp! - 160 * 0.57 * 9.5) < 1);
-  assert.ok(l[0].pct! > 0.68 && l[0].pct! < 0.73);
+  assert.ok(Math.abs(l[0].exp! - 160 * 0.75 * 0.95 * 9.5) < 1);
 });
 
 test('bolseo: si la máquina demuestra que rinde más con esa bolsa, el ajuste sube (sin pasar de 1)', () => {
   const g = (k: number) => linea({ ancho: 37, largo: 115, calibre: 800, golpes: 25, kilos: k });
   const reps = [1, 2, 3, 4].map((d) => rep('r' + d, '2026-10-0' + d, 1, [g(1900)]));
   const l = buildLineas(reps, [maq({ id: 'b1', kgh: 200 })], [], DEF_CFG, Date.parse('2026-10-07T12:00:00'));
-  assert.ok(l.every((x) => x.fac! > 0.62));
+  assert.ok(l.every((x) => x.fac! > 0.72));
   assert.ok(l.every((x) => x.fac! <= 1));
 });

@@ -29,14 +29,13 @@ export function lineKgh(l: Pick<LineaRow, 'ancho' | 'largo' | 'calibre' | 'densi
 }
 
 /** Realismo en bolseo (automático, sin que nadie lo ajuste):
- *  1) Prior continuo: entre más gruesa y más larga la bolsa, más lenta la operación (sellado, acomodar y empacar a mano, separar bolsas pegadas).
- *     calibre 400→650: ×1 → ×0.75 · largo 70→135 cm: ×1 → ×0.80 · calibre ≥ 550: ×0.95 extra (sello caliente, se pegan).
+ *  1) Regla base (la dio el dueño): desde calibre 550 la bolsa es lenta (sellado, empacar a mano) → ×0.75, y ×0.95 extra por sello caliente (se pegan).
+ *     Debajo de 550 manda la fórmula. Para el largo no hay umbral dado: lo aprende el historial de cada máquina.
  *  2) Aprendizaje por máquina y tipo de bolsa (≥ 3 reportes en 60 días): si la máquina demuestra que rinde más (percentil 75 de lo logrado),
  *     el factor sube hasta 1. Si con ≥ 5 reportes de ≥ 3 operadores distintos incluso lo mejor queda por debajo, el factor baja, pero nunca
  *     más de 15% abajo del prior (no se aprende a exigir menos de la cuenta). */
 export const MIN_MUESTRAS = 3, MIN_BAJAR = 5, MIN_OPS = 3, VENTANA_APRENDE = 60;
-const lin = (x: number, a: number, b: number, fb: number) => (x <= a ? 1 : x >= b ? fb : 1 - ((1 - fb) * (x - a)) / (b - a));
-export const reglaBolseo = (l: Pick<LineaRow, 'largo' | 'calibre'>) => lin(Number(l.calibre) || 0, 400, 650, 0.75) * lin(Number(l.largo) || 0, 70, 135, 0.8) * (Number(l.calibre) >= 550 ? 0.95 : 1);
+export const reglaBolseo = (l: Pick<LineaRow, 'largo' | 'calibre'>) => (Number(l.calibre) >= 550 ? 0.75 * 0.95 : 1);
 const banda = (x: number, cortes: number[]) => cortes.filter((c) => x >= c).length;
 export const grupoBolseo = (l: Pick<LineaRow, 'largo' | 'calibre'>) => `c${banda(Number(l.calibre) || 0, [300, 550, 750])}|l${banda(Number(l.largo) || 0, [60, 100])}`;
 export type FactorIdx = Map<string, { id: string; fecha: string; pct: number; op: string }[]>;
