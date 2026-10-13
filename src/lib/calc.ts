@@ -105,7 +105,7 @@ export function evalMaquinaTurno(
 ): EvalLinea[] {
   const n = ls.length, cambioH = (Math.max(0, n - 1) * (minCambio || 0)) / 60, desc = excH + cambioH, ps = ls.map((l) => Math.max(0, Number(l.horas_perdidas) || 0)), kg = ls.map((l) => Number(l.kilos) || 0), hs = ls.map((l) => Number(l.horas) || 0), tot = hs.reduce((a, b) => a + b, 0);
   const tTeo = ls.map((_, i) => (ks[i] ? kg[i] / (ks[i] as number) : null));
-  if (n > 1 && hs.every((x) => x > 0)) {
+  if (n >= 1 && hs.every((x) => x > 0)) {
     return ls.map((_, i) => { const ef = Math.max(0, hs[i] - desc * (hs[i] / tot) - ps[i]); return { tTeo: tTeo[i], disp: ef, exp: ks[i] ? (ks[i] as number) * ef : null, expRaw: ks[i] ? (ks[i] as number) * hs[i] : null, cerrada: false }; });
   }
   const last = ls[n - 1], meta = last?.orden_id ? ordenes.find((o) => o.id === last.orden_id)?.kilos : null;

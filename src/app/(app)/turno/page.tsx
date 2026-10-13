@@ -105,7 +105,7 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
   const prod = producidoPorOrden(S.reportes);
   for (const l of saved0) if (l.orden_id) prod.set(l.orden_id, (prod.get(l.orden_id) || 0) - (Number(l.kilos) || 0));
   for (const l of lines) if (l.orden_id && !l.incidencia) prod.set(l.orden_id, (prod.get(l.orden_id) || 0) + (Number(l.kilos) || 0));
-  const he_all = lines.length > 1 && lines.every((l) => Number(l.horas) > 0);
+  const he_all = lines.every((l) => Number(l.horas) > 0);
   const idx = useMemo(() => indiceFactores(S.reportes, S.maquinas, S.paros, cfg, S.ordenes), [S.reportes, S.maquinas, S.paros, cfg, S.ordenes]);
   const facs = lines.map((l) => (b ? factorBolseo(l, m.id, idx) : { f: 1, aprendido: false, prior: 1 }));
   const n = lines.length, hs = lines.map((l) => Number(l.horas) || 0), ev = evalMaquinaTurno(lines, lines.map((l, i) => { const k = lineKgh(l, m); return k ? k * facs[i].f : k; }), excH, horasTurno(fecha, t, cfg), S.ordenes, prod, cfg.minCambio);
@@ -189,7 +189,7 @@ function Captura({ maqId, onClose }: { maqId: string; onClose: () => void }) {
               <SelF l="Densidad" v={l.densidad} on={(v) => set(i, { densidad: v })} opts={[['baja', 'Baja'], ['alta', 'Alta']]} />
               {b ? <NumF l="Golpes por minuto" v={l.golpes ?? m.golpes} on={(v) => set(i, { golpes: v })} /> : <NumF l="kg/h esperados" v={l.kgh ?? m.kgh} on={(v) => set(i, { kgh: v })} />}
               {b && <NumF l="Carriles" v={l.carriles ?? m.carriles} on={(v) => set(i, { carriles: v })} />}
-              {n > 1 && <NumF l="Horas en esta orden" v={l.horas} on={(v) => set(i, { horas: v })} />}
+              <NumF l={n > 1 ? 'Horas en esta orden' : 'Horas que trabajó la máquina (opcional)'} v={l.horas} on={(v) => set(i, { horas: v })} />
             </div>
             <div className="fg" style={{ marginTop: 10 }}>
               <OperadorSel l="Operador" area={m.tipo} v={l.operario} on={(v) => set(i, { operario: v })} />

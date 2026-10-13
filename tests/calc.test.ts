@@ -130,10 +130,12 @@ test('varias órdenes con horas: el paro justificado se descuenta en proporción
 
 test('la última orden ya cumplida (cantidad de la orden) tampoco se evalúa', () => {
   const ords = [{ id: 'o1', kilos: 150 }];
-  const hecho = buildLineas([rep('r1', '2026-10-06', 1, [linea({ orden_id: 'o1', kilos: 150, horas: 2 })])], [maq({ id: 'b1' })], [], DEF_CFG, Date.now(), ords);
+  const hecho = buildLineas([rep('r1', '2026-10-06', 1, [linea({ orden_id: 'o1', kilos: 150 })])], [maq({ id: 'b1' })], [], DEF_CFG, Date.now(), ords);
   assert.equal(hecho[0].exp, null);
   const falta = buildLineas([rep('r1', '2026-10-06', 1, [linea({ orden_id: 'o1', kilos: 100, horas: 2 })])], [maq({ id: 'b1' })], [], DEF_CFG, Date.now(), ords);
   assert.ok(falta[0].exp! > 0);
+  const conHoras = buildLineas([rep('r1', '2026-10-06', 1, [linea({ orden_id: 'o1', kilos: 150, horas: 2 })])], [maq({ id: 'b1' })], [], DEF_CFG, Date.now(), ords);
+  assert.ok(conHoras[0].exp! > 0); // con horas capturadas sí se puede juzgar contra lo que tardó
 });
 
 test('zona amarilla (75-85%) no sanciona; 3 amarillos piden presionar', () => {
