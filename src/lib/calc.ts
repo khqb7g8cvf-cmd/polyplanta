@@ -38,8 +38,7 @@ export function lineKgh(l: Pick<LineaRow, 'ancho' | 'largo' | 'calibre' | 'densi
 export const FACTOR_GRUESO = 0.6;
 export const MIN_MUESTRAS = 3, MIN_BAJAR = 5, MIN_OPS = 3, VENTANA_APRENDE = 60;
 export const reglaBolseo = (l: Pick<LineaRow, 'largo' | 'calibre'>) => (Number(l.calibre) >= 550 ? FACTOR_GRUESO : 1);
-const banda = (x: number, cortes: number[]) => cortes.filter((c) => x >= c).length;
-export const grupoBolseo = (l: Pick<LineaRow, 'largo' | 'calibre'>) => `c${banda(Number(l.calibre) || 0, [300, 550, 750])}|l${banda(Number(l.largo) || 0, [60, 100])}`;
+export const grupoBolseo = (l: Pick<LineaRow, 'largo' | 'calibre'>) => (Number(l.calibre) >= 550 ? 'grueso' : 'normal');
 export type FactorIdx = Map<string, { id: string; fecha: string; pct: number; op: string }[]>;
 export function factorBolseo(l: Pick<LineaRow, 'largo' | 'calibre'> & { id?: string }, maqId: string, idx: FactorIdx, now = Date.now()): { f: number; aprendido: boolean; prior: number } {
   const prior = reglaBolseo(l), desde = ymd(new Date(now - VENTANA_APRENDE * 864e5));
