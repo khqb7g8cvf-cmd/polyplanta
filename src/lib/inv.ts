@@ -1,5 +1,9 @@
 import type { LineaCalc, Material, Movimiento } from './types';
 
+/** Salidas que NO son producción (se vendió, se prestó, se traspasó, se regresó): bajan la existencia pero no cuentan como consumo ni para la cobertura. */
+export const FUERA_PRODUCCION = ['venta', 'prestamo', 'traspaso', 'devolucion'];
+export const esConsumo = (x: Pick<Movimiento, 'motivo'>) => !(x.motivo && FUERA_PRODUCCION.includes(x.motivo));
+
 export interface MatResumen {
   m: Material; kg: number; silo: number; enSacos: number; sacos: number; consumo30: number; consumoDia: number; dias: number | null; bajo: boolean;
   costoKg: number | null; valor: number | null;
@@ -11,7 +15,7 @@ export function resumenMateriales(materiales: Material[], existencias: Record<st
   return materiales.filter((m) => m.activo).map((m) => {
     const kg = existencias[m.id] ?? 0;
     const ms = movs.filter((x) => x.material_id === m.id);
-    const consumo30 = -ms.filter((x) => x.tipo === 'salida' && Date.parse(x.fecha) >= cut).reduce((s, x) => s + x.delta_kg, 0);
+    const consumo30 = -ms.filter((x) => x.tipo === 'salida' && esConsumo(x) && Date.parse(x.fecha) >= cut).reduce((s, x) => s + x.delta_kg, 0);
     const consumoDia = consumo30 / 30;
     const entradas = ms.filter((x) => x.tipo === 'entrada' && x.costo_kg).sort((a, b) => b.fecha.localeCompare(a.fecha));
     const costoKg = entradas[0]?.costo_kg ?? null;
@@ -22,13 +26,13 @@ export function resumenMateriales(materiales: Material[], existencias: Record<st
 
 /** Compara lo que salió de bodega hacia extrusión contra los kilos extruidos reportados. */
 export function conciliacion(movs: Movimiento[], lineas: LineaCalc[], desde: string, hasta: string) {
-  const salidas = -movs.filter((x) => x.tipo === 'salida' && x.fecha.slice(0, 10) >= desde && x.fecha.slice(0, 10) <= hasta).reduce((s, x) => s + x.delta_kg, 0);
+  const salidas = -movs.filter((x) => x.tipo === 'salida' && esConsumo(x) && x.fecha.slice(0, 10) >= desde && x.fecha.slice(0, 10) <= hasta).reduce((s, x) => s + x.delta_kg, 0);
   const extruidos = lineas.filter((x) => x.tipo === 'extrusion' && x.fecha >= desde && x.fecha <= hasta).reduce((s, x) => s + x.kilos, 0);
   const dif = salidas - extruidos;
   return { salidas, extruidos, dif, pct: salidas ? dif / salidas : null };
 }
 
-export const MOTIVOS: [string, string][] = [['produccion', 'Producción'], ['merma', 'Merma / desperdicio'], ['muestra', 'Muestra / prueba'], ['devolucion', 'Devolución'], ['traspaso', 'Traspaso'], ['venta', 'Venta de material'], ['otro', 'Otro']];
+export const MOTIVOS: [string, string][] = [['produccion', 'Producción'], ['merma', 'Merma / desperdicio'], ['muestra', 'Muestra / prueba'], ['devolucion', 'Devolución'], ['traspaso', 'Traspaso'], ['venta', 'Venta de material'], ['prestamo', 'Préstamo'], ['otro', 'Otro']];
 export const motivoTxt = (m: string | null | undefined, tipo?: string) => (m ? MOTIVOS.find((x) => x[0] === m)?.[1] ?? m : tipo === 'entrada' ? 'Compra' : tipo === 'ajuste' ? 'Ajuste de conteo' : '—');
 
 export interface KRow extends Movimiento { saldo: number }

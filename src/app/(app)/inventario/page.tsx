@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react';
 import { useData } from '@/lib/data';
 import { dmy, fmt, hhmm, localDT, sum, ymd, daysAgo } from '@/lib/format';
-import { conciliacion, existenciaDiaria, kardex, MOTIVOS, motivoTxt, proveedores, resumenMateriales, salidasPor, type MatResumen } from '@/lib/inv';
+import { conciliacion, esConsumo, existenciaDiaria, kardex, MOTIVOS, motivoTxt, proveedores, resumenMateriales, salidasPor, type MatResumen } from '@/lib/inv';
 import { diasEntre } from '@/lib/analytics';
 import { ChartCard, Columns, HBars, LineChart, Spark, descargarCSV, SERIES } from '@/components/charts';
 import { AreaF, Empty, Fld, Modal, NumF, Pill, Scroll, SelF, Tile, TxtF } from '@/components/ui';
@@ -181,7 +181,8 @@ function Consumo() {
   const { S, maqById, quien, now } = useData();
   const [n, setN] = useState(30), [mat, setMat] = useState('');
   const dias = useMemo(() => diasEntre(daysAgo(n - 1), ymd(new Date(now))), [n, now]);
-  const sal = useMemo(() => S.movs.filter((x) => x.tipo === 'salida' && x.fecha.slice(0, 10) >= dias[0] && (!mat || x.material_id === mat)), [S.movs, dias, mat]);
+  const salTodas = useMemo(() => S.movs.filter((x) => x.tipo === 'salida' && x.fecha.slice(0, 10) >= dias[0] && (!mat || x.material_id === mat)), [S.movs, dias, mat]);
+  const sal = useMemo(() => salTodas.filter(esConsumo), [salTodas]), fuera = salTodas.filter((x) => !esConsumo(x)), kgFuera = sum(fuera, (x) => -x.delta_kg);
   const total = sum(sal, (x) => -x.delta_kg);
   const diario = dias.map((d) => sum(sal.filter((x) => x.fecha.slice(0, 10) === d), (x) => -x.delta_kg));
   const porMot = salidasPor(sal, (x) => motivoTxt(x.motivo, 'salida')), porMaq = salidasPor(sal, (x) => (x.maquina_id ? maqById(x.maquina_id)?.nombre || '?' : 'Sin extrusora')), porUser = salidasPor(sal, (x) => quien(x.created_by)), porMat = salidasPor(sal, (x) => S.materiales.find((m) => m.id === x.material_id)?.nombre || '?');
@@ -195,8 +196,9 @@ function Consumo() {
         <select className="inp" style={{ width: 'auto' }} value={mat} onChange={(e) => setMat(e.target.value)}><option value="">Todos los materiales</option>{S.materiales.map((m) => <option key={m.id} value={m.id}>{m.nombre}</option>)}</select>
       </div>
       <div className="tiles" style={{ marginBottom: 14 }}>
-        <Tile l="Salió" v={fmt(total) + ' kg'} e={`${fmt(total / n, 0)} kg por día`} />
+        <Tile l="Consumo (producción)" v={fmt(total) + ' kg'} e={`${fmt(total / n, 0)} kg por día`} />
         <Tile l="Salidas" v={fmt(sal.length)} e="movimientos" />
+        {kgFuera > 0 && <Tile l="Ventas y préstamos" v={fmt(kgFuera) + ' kg'} e={`${fuera.length} ${fuera.length === 1 ? 'salida' : 'salidas'} · no cuentan como producción`} />}
         <Tile l="Merma + muestras" v={fmt(sum(sal.filter((x) => x.motivo === 'merma' || x.motivo === 'muestra'), (x) => -x.delta_kg)) + ' kg'} e={total ? `${fmt((sum(sal.filter((x) => x.motivo === 'merma' || x.motivo === 'muestra'), (x) => -x.delta_kg) / total) * 100, 1)}% de lo que salió` : ''} />
         <Tile l="Sin motivo" v={fmt(sinMotivo)} e="salidas viejas, sin clasificar" c={sinMotivo > 5 ? 'alert' : ''} />
       </div>
@@ -302,7 +304,7 @@ function Mov({ tipo, mat, onClose }: { tipo: 'entrada' | 'salida'; mat?: string;
     if (!kg || kg <= 0) return toast('Captura los kilos o los sacos.', true);
     if (tipo === 'salida' && !f.motivo) return toast('Indica para qué se saca el material.', true);
     if (f.motivo === 'otro' && !f.nota.trim()) return toast('Si el motivo es "Otro", explícalo en la nota.', true);
-    if (tipo === 'salida' && ['venta', 'traspaso', 'devolucion', 'muestra'].includes(f.motivo) && !f.ref.trim()) return toast('Indica a quién / para qué cliente se entrega (referencia).', true);
+    if (tipo === 'salida' && ['venta', 'prestamo', 'traspaso', 'devolucion', 'muestra'].includes(f.motivo) && !f.ref.trim()) return toast('Indica a quién / para qué cliente se entrega (referencia).', true);
     if (tipo === 'entrada' && ub === 'silo' && m.silo_kg && ex + kg > m.silo_kg && !confirm(`El silo tiene ${fmt(ex)} kg de ${fmt(m.silo_kg)} kg. Con ${fmt(kg)} kg más se pasa ${fmt(ex + kg - m.silo_kg)} kg de su capacidad. ¿Registrar de todos modos? (probablemente el sistema trae de más: haz un conteo del silo)`)) return;
     if (tipo === 'salida' && kg > ex && !confirm(`Solo hay ${fmt(ex)} kg ${ub === 'silo' ? 'en el silo' : 'en sacos'} según el sistema y estás sacando ${fmt(kg)} kg. ¿Registrar de todos modos? (la existencia quedaría negativa; haz un conteo físico para corregir)`)) return;
     const row = {
